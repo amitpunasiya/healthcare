@@ -2,7 +2,7 @@ import React, { useEffect, useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import api from '../api/client';
 import { ServiceCategory, Service } from '../types';
-import { Activity, HeartHandshake, Baby, UserCheck, FlaskConical, Clock, ShieldCheck, ArrowRight, Home, Building2 } from 'lucide-react';
+import { Activity, HeartHandshake, UserCheck, FlaskConical, Clock, ShieldCheck, ArrowRight, Home, Building2 } from 'lucide-react';
 
 export const ServicesPage: React.FC = () => {
   const [categories, setCategories] = useState<ServiceCategory[]>([]);
@@ -50,7 +50,7 @@ export const ServicesPage: React.FC = () => {
           Explore Healthcare Verticals & Services
         </h1>
         <p style={{ color: 'var(--text-muted)', fontSize: '1.05rem', lineHeight: 1.6 }}>
-          Book verified physiotherapists, occupational therapists, pediatric child care providers, senior elder caregivers, and lab test sample collections.
+          Book verified physiotherapists, occupational therapists, senior elder caregivers, and lab test sample collections.
         </p>
       </div>
 

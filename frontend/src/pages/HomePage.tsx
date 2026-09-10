@@ -14,7 +14,6 @@ import {
   ArrowRight,
   Sparkles,
   HeartHandshake,
-  Baby,
 } from 'lucide-react';
 
 export const HomePage: React.FC = () => {
@@ -45,8 +44,6 @@ export const HomePage: React.FC = () => {
         return <Activity size={28} color="#0284c7" />;
       case 'HeartHandshake':
         return <HeartHandshake size={28} color="#0d9488" />;
-      case 'Baby':
-        return <Baby size={28} color="#e11d48" />;
       case 'UserCheck':
         return <UserCheck size={28} color="#4f46e5" />;
       case 'FlaskConical':
@@ -71,7 +68,7 @@ export const HomePage: React.FC = () => {
               Book Quality Healthcare Services at <span style={{ background: 'linear-gradient(90deg, #38bdf8, #2dd4bf)', WebkitBackgroundClip: 'text', WebkitTextFillColor: 'transparent' }}>Home or Clinic</span>
             </h1>
             <p style={{ fontSize: '1.1rem', color: '#94a3b8', lineHeight: 1.6, marginBottom: '2rem' }}>
-              Physiotherapy, Occupational Therapy, Elder Care, Child Care, and Lab Diagnostics. Book one-time visits or hire personal regular caregivers with verified healthcare professionals.
+              Physiotherapy, Occupational Therapy, Elder Care, and Lab Diagnostics. Book one-time visits or hire personal regular caregivers with verified healthcare professionals.
             </p>
 
             {/* Mode Switcher Tabs */}

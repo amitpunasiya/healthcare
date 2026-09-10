@@ -1,7 +1,7 @@
 import mongoose, { Schema, Document } from 'mongoose';
 
 export interface IServiceCategory extends Document {
-  name: string; // Physiotherapy, Occupational Therapy, Child Care, Elder Care, Lab Tests
+  name: string; // Physiotherapy, Occupational Therapy, Elder Care, Lab Tests
   slug: string;
   description: string;
   iconName: string;

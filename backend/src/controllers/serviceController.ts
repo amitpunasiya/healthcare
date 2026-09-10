@@ -27,25 +27,18 @@ export const seedDefaultServices = async () => {
         displayOrder: 2,
       },
       {
-        name: 'Child Care',
-        slug: 'child-care',
-        description: 'Professional pediatric care, infant nannying, specialized developmental support, and home child care.',
-        iconName: 'Baby',
-        displayOrder: 3,
-      },
-      {
         name: 'Elder Care',
         slug: 'elder-care',
         description: 'Compassionate senior care, geriatric nursing, daily living assistance, and companion care.',
         iconName: 'UserCheck',
-        displayOrder: 4,
+        displayOrder: 3,
       },
       {
         name: 'Lab Tests',
         slug: 'lab-tests',
         description: 'Comprehensive diagnostic blood panels, pathology testing, and home sample collection.',
         iconName: 'FlaskConical',
-        displayOrder: 5,
+        displayOrder: 4,
       },
     ];
 
@@ -97,31 +90,11 @@ export const seedDefaultServices = async () => {
       },
       {
         categoryId: catMap['occupational-therapy'],
-        name: 'Pediatric Occupational Therapy',
-        description: 'Sensory integration therapy, autism support, handwriting, and developmental milestone training.',
-        basePrice: 950,
+        name: 'Adult Motor Rehabilitation',
+        description: 'Sensory integration therapy, stroke recovery support, fine motor control, and functional milestone training.',
+ basePrice: 950,
         durationMinutes: 60,
         serviceModesSupported: [ServiceMode.HOME_VISIT, ServiceMode.CLINIC_VISIT],
-        engagementTypesSupported: [EngagementType.ONE_TIME, EngagementType.REGULAR_RECURRING],
-      },
-
-      // Child Care
-      {
-        categoryId: catMap['child-care'],
-        name: 'Infant Care & Nanny Service',
-        description: 'Newborn care, feeding assistance, diaper hygiene, and baby sleep routine management.',
-        basePrice: 1200,
-        durationMinutes: 240, // 4 hour block base
-        serviceModesSupported: [ServiceMode.HOME_VISIT],
-        engagementTypesSupported: [EngagementType.ONE_TIME, EngagementType.REGULAR_RECURRING],
-      },
-      {
-        categoryId: catMap['child-care'],
-        name: 'Specialized Child Caregiver',
-        description: 'Attentive care for children with special health needs, developmental assistance, and accompaniment.',
-        basePrice: 1500,
-        durationMinutes: 240,
-        serviceModesSupported: [ServiceMode.HOME_VISIT],
         engagementTypesSupported: [EngagementType.ONE_TIME, EngagementType.REGULAR_RECURRING],
       },
 

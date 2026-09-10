@@ -23,7 +23,6 @@ export const Footer: React.FC = () => {
           <ul style={{ listStyle: 'none', display: 'flex', flexDirection: 'column', gap: '0.6rem', fontSize: '0.9rem' }}>
             <li>Physiotherapy Home & Clinic</li>
             <li>Occupational Therapy</li>
-            <li>Pediatric & Child Care</li>
             <li>Elder & Geriatric Care</li>
             <li>Home Lab Sample Collection</li>
           </ul>

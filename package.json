@@ -1,0 +1,29 @@
+{
+  "name": "healthcare-services-marketplace",
+  "version": "1.0.0",
+  "description": "Healthcare Services Booking Marketplace - Monorepo",
+  "private": true,
+  "scripts": {
+    "dev": "concurrently -n \"backend,frontend,admin\" -c \"blue,green,magenta\" \"npm --prefix backend run dev\" \"npm --prefix frontend run dev\" \"npm --prefix admin run dev\"",
+    "dev:backend": "npm --prefix backend run dev",
+    "dev:frontend": "npm --prefix frontend run dev",
+    "dev:admin": "npm --prefix admin run dev",
+    "build": "npm --prefix backend run build && npm --prefix frontend run build && npm --prefix admin run build",
+    "build:backend": "npm --prefix backend run build",
+    "build:frontend": "npm --prefix frontend run build",
+    "build:admin": "npm --prefix admin run build"
+  },
+  "keywords": [
+    "healthcare",
+    "marketplace",
+    "booking"
+  ],
+  "author": "",
+  "license": "ISC",
+  "devDependencies": {
+    "concurrently": "^8.2.2"
+  },
+  "dependencies": {
+    "firebase": "^12.19.0"
+  }
+}

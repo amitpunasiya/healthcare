@@ -1,0 +1,77 @@
+export enum UserRole {
+  CUSTOMER = 'CUSTOMER',
+  PROVIDER = 'PROVIDER',
+  CLINIC = 'CLINIC',
+  LAB = 'LAB',
+  ADMIN = 'ADMIN',
+}
+
+export enum VerificationStatus {
+  NOT_REQUIRED = 'NOT_REQUIRED',
+  PENDING_VERIFICATION = 'PENDING_VERIFICATION',
+  VERIFIED = 'VERIFIED',
+  REJECTED = 'REJECTED',
+}
+
+export enum BookingSource {
+  ONLINE = 'ONLINE',
+  MANUAL = 'MANUAL',
+}
+
+export enum ServiceMode {
+  HOME_VISIT = 'HOME_VISIT',
+  CLINIC_VISIT = 'CLINIC_VISIT',
+  LAB_VISIT = 'LAB_VISIT',
+}
+
+export enum EngagementType {
+  ONE_TIME = 'ONE_TIME',
+  REGULAR_RECURRING = 'REGULAR_RECURRING',
+}
+
+export enum BookingStatus {
+  PENDING = 'PENDING',
+  ACCEPTED = 'ACCEPTED',
+  REJECTED = 'REJECTED',
+  IN_PROGRESS = 'IN_PROGRESS',
+  COMPLETED = 'COMPLETED',
+  CANCELLED = 'CANCELLED',
+  NO_SHOW = 'NO_SHOW',
+}
+
+export enum PaymentStatus {
+  PENDING = 'PENDING',
+  PROCESSING = 'PROCESSING',
+  PAID = 'PAID',
+  FAILED = 'FAILED',
+  REFUNDED = 'REFUNDED',
+  PARTIALLY_REFUNDED = 'PARTIALLY_REFUNDED',
+  CANCELLED = 'CANCELLED',
+}
+
+export enum PaymentMethod {
+  RAZORPAY = 'RAZORPAY',
+  CREDIT_CARD = 'CREDIT_CARD',
+  DEBIT_CARD = 'DEBIT_CARD',
+  NET_BANKING = 'NET_BANKING',
+  UPI = 'UPI',
+  WALLET = 'WALLET',
+  CASH_OFFLINE = 'CASH_OFFLINE',
+  BANK_TRANSFER = 'BANK_TRANSFER',
+}
+
+export enum PaymentSource {
+  ONLINE = 'ONLINE',
+  MANUAL = 'MANUAL',
+}
+
+export enum RefundStatus {
+  PENDING = 'PENDING',
+  PROCESSED = 'PROCESSED',
+  FAILED = 'FAILED',
+}
+
+export enum SettlementStatus {
+  PENDING = 'PENDING',
+  SETTLED = 'SETTLED',
+}

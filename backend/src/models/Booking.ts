@@ -1,0 +1,170 @@
+import mongoose, { Schema, Document } from 'mongoose';
+import { BookingSource, ServiceMode, EngagementType, BookingStatus } from '../constants/enums';
+
+export enum PlanStatus {
+  ACTIVE = 'ACTIVE',
+  PAUSED = 'PAUSED',
+  COMPLETED = 'COMPLETED',
+  CANCELLED = 'CANCELLED',
+}
+
+export interface IStatusHistoryItem {
+  status: BookingStatus;
+  changedBy: mongoose.Types.ObjectId;
+  timestamp: Date;
+  notes?: string;
+}
+
+export interface IRecurringConfig {
+  frequency: 'DAILY' | 'WEEKLY';
+  interval?: number;
+  startDate: string; // YYYY-MM-DD
+  endDate?: string;  // YYYY-MM-DD
+  durationWeeks?: number;
+  daysOfWeek?: number[]; // [1, 3, 5] (1=Mon, 7/0=Sun)
+  preferredTimeSlot: { startTime: string; endTime: string };
+  totalSessionsExpected?: number;
+}
+
+export interface IBooking extends Document {
+  bookingNumber: string;
+  bookingSource: BookingSource;
+  createdById: mongoose.Types.ObjectId;
+
+  customerId: mongoose.Types.ObjectId;
+  customerDetails: {
+    name: string;
+    phone: string;
+    email?: string;
+  };
+
+  providerId?: mongoose.Types.ObjectId;
+  clinicId?: mongoose.Types.ObjectId;
+  labId?: mongoose.Types.ObjectId;
+
+  serviceCategoryId: mongoose.Types.ObjectId;
+  serviceId: mongoose.Types.ObjectId;
+  serviceMode: ServiceMode;
+  engagementType: EngagementType;
+
+  // Recurring Parent / Child Architecture
+  isRecurringParent?: boolean;
+  parentBookingId?: mongoose.Types.ObjectId;
+  planStatus?: PlanStatus;
+  recurringConfig?: IRecurringConfig;
+
+  serviceAddress?: {
+    label?: string;
+    addressLine1: string;
+    addressLine2?: string;
+    city: string;
+    state: string;
+    pincode: string;
+    landmark?: string;
+  };
+
+  bookingDate: string; // YYYY-MM-DD
+  timeSlot: {
+    startTime: string;
+    endTime: string;
+  };
+
+  pricing: {
+    baseFee: number;
+    homeCollectionFee: number;
+    discountFee: number;
+    totalAmount: number;
+  };
+
+  status: BookingStatus;
+  statusHistory: IStatusHistoryItem[];
+  notes?: string;
+  createdAt: Date;
+  updatedAt: Date;
+}
+
+const RecurringConfigSchema = new Schema({
+  frequency: { type: String, enum: ['DAILY', 'WEEKLY'], required: true },
+  interval: { type: Number, default: 1 },
+  startDate: { type: String, required: true },
+  endDate: { type: String },
+  durationWeeks: { type: Number, default: 2 },
+  daysOfWeek: [{ type: Number }],
+  preferredTimeSlot: {
+    startTime: { type: String, required: true },
+    endTime: { type: String, required: true },
+  },
+  totalSessionsExpected: { type: Number },
+});
+
+const BookingSchema: Schema = new Schema(
+  {
+    bookingNumber: { type: String, required: true, unique: true },
+    bookingSource: { type: String, enum: Object.values(BookingSource), required: true },
+    createdById: { type: Schema.Types.ObjectId, ref: 'User', required: true },
+
+    customerId: { type: Schema.Types.ObjectId, ref: 'User', required: true, index: true },
+    customerDetails: {
+      name: { type: String, required: true },
+      phone: { type: String, required: true },
+      email: { type: String },
+    },
+
+    providerId: { type: Schema.Types.ObjectId, ref: 'User', index: true },
+    clinicId: { type: Schema.Types.ObjectId, ref: 'User', index: true },
+    labId: { type: Schema.Types.ObjectId, ref: 'User', index: true },
+
+    serviceCategoryId: { type: Schema.Types.ObjectId, ref: 'ServiceCategory', required: true },
+    serviceId: { type: Schema.Types.ObjectId, ref: 'Service', required: true },
+    serviceMode: { type: String, enum: Object.values(ServiceMode), required: true },
+    engagementType: { type: String, enum: Object.values(EngagementType), default: EngagementType.ONE_TIME },
+
+    // Recurring Parent / Child session relationship
+    isRecurringParent: { type: Boolean, default: false, index: true },
+    parentBookingId: { type: Schema.Types.ObjectId, ref: 'Booking', index: true },
+    planStatus: { type: String, enum: Object.values(PlanStatus), default: null },
+    recurringConfig: { type: RecurringConfigSchema },
+
+    serviceAddress: {
+      label: { type: String },
+      addressLine1: { type: String },
+      addressLine2: { type: String },
+      city: { type: String },
+      state: { type: String },
+      pincode: { type: String },
+      landmark: { type: String },
+    },
+
+    bookingDate: { type: String, required: true, index: true }, // Format YYYY-MM-DD
+    timeSlot: {
+      startTime: { type: String, required: true },
+      endTime: { type: String, required: true },
+    },
+
+    pricing: {
+      baseFee: { type: Number, required: true },
+      homeCollectionFee: { type: Number, default: 0 },
+      discountFee: { type: Number, default: 0 },
+      totalAmount: { type: Number, required: true },
+    },
+
+    status: { type: String, enum: Object.values(BookingStatus), default: BookingStatus.PENDING, index: true },
+    statusHistory: [
+      {
+        status: { type: String, enum: Object.values(BookingStatus), required: true },
+        changedBy: { type: Schema.Types.ObjectId, ref: 'User', required: true },
+        timestamp: { type: Date, default: Date.now },
+        notes: { type: String },
+      },
+    ],
+    notes: { type: String },
+  },
+  { timestamps: true }
+);
+
+// Compound indexes for availability conflict checks & parent-child listings
+BookingSchema.index({ providerId: 1, bookingDate: 1, 'timeSlot.startTime': 1 });
+BookingSchema.index({ clinicId: 1, bookingDate: 1, 'timeSlot.startTime': 1 });
+BookingSchema.index({ labId: 1, bookingDate: 1, 'timeSlot.startTime': 1 });
+
+export default mongoose.model<IBooking>('Booking', BookingSchema);

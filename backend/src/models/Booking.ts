@@ -61,6 +61,8 @@ export interface IBooking extends Document {
     state: string;
     pincode: string;
     landmark?: string;
+    latitude?: number;
+    longitude?: number;
   };
 
   bookingDate: string; // YYYY-MM-DD
@@ -133,6 +135,8 @@ const BookingSchema: Schema = new Schema(
       state: { type: String },
       pincode: { type: String },
       landmark: { type: String },
+      latitude: { type: Number },
+      longitude: { type: Number },
     },
 
     bookingDate: { type: String, required: true, index: true }, // Format YYYY-MM-DD

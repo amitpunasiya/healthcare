@@ -173,19 +173,85 @@ export const BookingWizardPage: React.FC = () => {
     fetchSlots();
   }, [bookingDate, selectedProviderId, selectedClinicId, selectedLabId, serviceMode]);
 
-  const handleUseCurrentLocation = () => {
-    if ('geolocation' in navigator) {
-      navigator.geolocation.getCurrentPosition(
-        () => {
-          setAddressLine1('Current GPS Location (Validated)');
-          setCity('Current City');
-          setState('Current State');
-        },
-        () => {
-          setAddressLine1('123 Main Street, Sector 4');
-        }
-      );
+  // Location States
+  const [userCoords, setUserCoords] = useState<{ latitude: number; longitude: number } | null>(null);
+  const [locLoading, setLocLoading] = useState(false);
+  const [locSuccessMsg, setLocSuccessMsg] = useState('');
+  const [locErrorMsg, setLocErrorMsg] = useState('');
+
+  const handleUseCurrentLocation = (mode?: ServiceMode) => {
+    setLocErrorMsg('');
+    setLocSuccessMsg('');
+
+    if (!navigator.geolocation) {
+      setLocErrorMsg('Geolocation is not supported by your device or browser. Please enter your location manually.');
+      return;
     }
+
+    setLocLoading(true);
+
+    navigator.geolocation.getCurrentPosition(
+      async (position) => {
+        const lat = position.coords.latitude;
+        const lng = position.coords.longitude;
+        setUserCoords({ latitude: lat, longitude: lng });
+
+        try {
+          const response = await fetch(`https://nominatim.openstreetmap.org/reverse?format=json&lat=${lat}&lon=${lng}`, {
+            headers: { 'Accept-Language': 'en' },
+          });
+          const data = await response.json();
+
+          if (data && data.address) {
+            const addr = data.address;
+            const detectedLine1 = [addr.house_number, addr.road, addr.suburb, addr.neighbourhood]
+              .filter(Boolean)
+              .join(', ') || data.display_name?.split(',').slice(0, 2).join(',') || `GPS (${lat.toFixed(4)}, ${lng.toFixed(4)})`;
+            const detectedCity = addr.city || addr.town || addr.village || addr.county || addr.suburb || 'Detected City';
+            const detectedState = addr.state || 'Detected State';
+            const detectedPincode = addr.postcode || pincode || '110001';
+
+            if (mode === 'HOME_VISIT' || serviceMode === 'HOME_VISIT') {
+              setAddressLine1(detectedLine1);
+              setCity(detectedCity);
+              setState(detectedState);
+              setPincode(detectedPincode);
+            }
+
+            if (mode === 'CLINIC_VISIT' || serviceMode === 'CLINIC_VISIT') {
+              setClinicSearchQuery(detectedCity);
+            }
+
+            if (mode === 'LAB_VISIT' || serviceMode === 'LAB_VISIT') {
+              setLabSearchQuery(detectedCity);
+            }
+
+            setLocSuccessMsg(`📍 Location detected: ${detectedCity}, ${detectedState} (${lat.toFixed(4)}, ${lng.toFixed(4)})`);
+          } else {
+            setLocSuccessMsg(`📍 GPS Coordinates captured (${lat.toFixed(4)}, ${lng.toFixed(4)}). Please verify or edit details below.`);
+          }
+        } catch (err) {
+          console.warn('Geocoding error:', err);
+          setLocSuccessMsg(`📍 GPS Coordinates captured (${lat.toFixed(4)}, ${lng.toFixed(4)}). You can edit address manually.`);
+        } finally {
+          setLocLoading(false);
+        }
+      },
+      (err) => {
+        setLocLoading(false);
+        console.warn('Geolocation permission error:', err);
+        let msg = 'Could not retrieve location. Please enter your location manually.';
+        if (err.code === 1) {
+          msg = 'Location permission was denied. Please enter your location manually or grant location access in browser settings.';
+        } else if (err.code === 2) {
+          msg = 'GPS position unavailable. Please enter your location manually.';
+        } else if (err.code === 3) {
+          msg = 'Location request timed out. Please try again or enter location manually.';
+        }
+        setLocErrorMsg(msg);
+      },
+      { enableHighAccuracy: true, timeout: 10000, maximumAge: 0 }
+    );
   };
 
   const handleSubmitBooking = async (e: React.FormEvent) => {
@@ -238,7 +304,15 @@ export const BookingWizardPage: React.FC = () => {
         timeSlot: selectedSlot,
         serviceAddress:
           serviceMode === 'HOME_VISIT'
-            ? { label: 'Home', addressLine1, city, state, pincode }
+            ? {
+                label: 'Home',
+                addressLine1,
+                city,
+                state,
+                pincode,
+                latitude: userCoords?.latitude,
+                longitude: userCoords?.longitude,
+              }
             : undefined,
         notes,
       };
@@ -483,14 +557,41 @@ export const BookingWizardPage: React.FC = () => {
               <div>
                 <h3 style={{ fontSize: '1.1rem', fontWeight: 700, marginBottom: '1rem' }}>Step 2: Enter Patient Home Visit Address</h3>
                 
-                <button
-                  type="button"
-                  onClick={handleUseCurrentLocation}
-                  className="btn btn-outline btn-sm"
-                  style={{ marginBottom: '1.5rem', display: 'flex', alignItems: 'center', gap: '0.4rem' }}
-                >
-                  <Navigation size={16} color="var(--primary)" /> Use Current GPS Location
-                </button>
+                <div style={{ display: 'flex', gap: '1rem', alignItems: 'center', marginBottom: '1.5rem', flexWrap: 'wrap' }}>
+                  <button
+                    type="button"
+                    disabled={locLoading}
+                    onClick={() => handleUseCurrentLocation('HOME_VISIT')}
+                    className="btn btn-outline"
+                    style={{
+                      display: 'flex',
+                      alignItems: 'center',
+                      gap: '0.5rem',
+                      borderColor: 'var(--primary)',
+                      color: 'var(--primary)',
+                      fontWeight: 700,
+                      backgroundColor: '#e0f2fe',
+                    }}
+                  >
+                    <Navigation size={18} color="var(--primary)" />
+                    {locLoading ? 'Detecting GPS Location...' : '📍 Use Current Location'}
+                  </button>
+                  <span style={{ fontSize: '0.85rem', color: 'var(--text-muted)' }}>
+                    (Or enter / edit location manually below)
+                  </span>
+                </div>
+
+                {locSuccessMsg && serviceMode === 'HOME_VISIT' && (
+                  <div style={{ backgroundColor: '#f0fdf4', border: '1px solid #bbf7d0', color: '#166534', padding: '0.75rem 1rem', borderRadius: '8px', marginBottom: '1.25rem', fontSize: '0.875rem', fontWeight: 600 }}>
+                    {locSuccessMsg}
+                  </div>
+                )}
+
+                {locErrorMsg && serviceMode === 'HOME_VISIT' && (
+                  <div style={{ backgroundColor: '#fffbebf0', border: '1px solid #fde68a', color: '#92400e', padding: '0.75rem 1rem', borderRadius: '8px', marginBottom: '1.25rem', fontSize: '0.875rem', fontWeight: 600 }}>
+                    ⚠️ {locErrorMsg}
+                  </div>
+                )}
 
                 <div className="form-group">
                   <label className="form-label">Address Line 1</label>
@@ -687,17 +788,51 @@ export const BookingWizardPage: React.FC = () => {
               <div>
                 <h3 style={{ fontSize: '1.1rem', fontWeight: 700, marginBottom: '1rem' }}>Step 1: Search & Select Nearby Verified Clinic</h3>
                 
-                <div style={{ marginBottom: '1.5rem', position: 'relative' }}>
-                  <input
-                    type="text"
-                    placeholder="Search clinics by name, city, or locality..."
-                    value={clinicSearchQuery}
-                    onChange={(e) => setClinicSearchQuery(e.target.value)}
-                    className="form-input"
-                    style={{ paddingLeft: '2.5rem' }}
-                  />
-                  <Search size={18} color="var(--text-muted)" style={{ position: 'absolute', left: '0.85rem', top: '50%', transform: 'translateY(-50%)' }} />
+                <div style={{ display: 'flex', gap: '0.75rem', marginBottom: '1.5rem', flexWrap: 'wrap' }}>
+                  <div style={{ flex: 1, position: 'relative', minWidth: '240px' }}>
+                    <input
+                      type="text"
+                      placeholder="Search clinics by name, city, or locality..."
+                      value={clinicSearchQuery}
+                      onChange={(e) => setClinicSearchQuery(e.target.value)}
+                      className="form-input"
+                      style={{ paddingLeft: '2.5rem' }}
+                    />
+                    <Search size={18} color="var(--text-muted)" style={{ position: 'absolute', left: '0.85rem', top: '50%', transform: 'translateY(-50%)' }} />
+                  </div>
+
+                  <button
+                    type="button"
+                    disabled={locLoading}
+                    onClick={() => handleUseCurrentLocation('CLINIC_VISIT')}
+                    className="btn btn-outline"
+                    style={{
+                      display: 'flex',
+                      alignItems: 'center',
+                      gap: '0.4rem',
+                      borderColor: '#0d9488',
+                      color: '#0f766e',
+                      backgroundColor: '#ccfbf1',
+                      fontWeight: 700,
+                      whiteSpace: 'nowrap',
+                    }}
+                  >
+                    <Navigation size={16} color="#0d9488" />
+                    {locLoading ? 'Locating...' : '📍 Use Current Location'}
+                  </button>
                 </div>
+
+                {locSuccessMsg && serviceMode === 'CLINIC_VISIT' && (
+                  <div style={{ backgroundColor: '#f0fdf4', border: '1px solid #bbf7d0', color: '#166534', padding: '0.65rem 1rem', borderRadius: '8px', marginBottom: '1.25rem', fontSize: '0.85rem', fontWeight: 600 }}>
+                    {locSuccessMsg}
+                  </div>
+                )}
+
+                {locErrorMsg && serviceMode === 'CLINIC_VISIT' && (
+                  <div style={{ backgroundColor: '#fffbebf0', border: '1px solid #fde68a', color: '#92400e', padding: '0.65rem 1rem', borderRadius: '8px', marginBottom: '1.25rem', fontSize: '0.85rem', fontWeight: 600 }}>
+                    ⚠️ {locErrorMsg}
+                  </div>
+                )}
 
                 <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem', marginBottom: '2.5rem', maxHeight: '350px', overflowY: 'auto' }}>
                   {filteredClinics.map((c) => {
@@ -859,17 +994,51 @@ export const BookingWizardPage: React.FC = () => {
               <div>
                 <h3 style={{ fontSize: '1.1rem', fontWeight: 700, marginBottom: '1rem' }}>Step 1: Search & Select Nearby Pathology Lab</h3>
                 
-                <div style={{ marginBottom: '1.5rem', position: 'relative' }}>
-                  <input
-                    type="text"
-                    placeholder="Search labs by name, city, or locality..."
-                    value={labSearchQuery}
-                    onChange={(e) => setLabSearchQuery(e.target.value)}
-                    className="form-input"
-                    style={{ paddingLeft: '2.5rem' }}
-                  />
-                  <Search size={18} color="var(--text-muted)" style={{ position: 'absolute', left: '0.85rem', top: '50%', transform: 'translateY(-50%)' }} />
+                <div style={{ display: 'flex', gap: '0.75rem', marginBottom: '1.5rem', flexWrap: 'wrap' }}>
+                  <div style={{ flex: 1, position: 'relative', minWidth: '240px' }}>
+                    <input
+                      type="text"
+                      placeholder="Search labs by name, city, or locality..."
+                      value={labSearchQuery}
+                      onChange={(e) => setLabSearchQuery(e.target.value)}
+                      className="form-input"
+                      style={{ paddingLeft: '2.5rem' }}
+                    />
+                    <Search size={18} color="var(--text-muted)" style={{ position: 'absolute', left: '0.85rem', top: '50%', transform: 'translateY(-50%)' }} />
+                  </div>
+
+                  <button
+                    type="button"
+                    disabled={locLoading}
+                    onClick={() => handleUseCurrentLocation('LAB_VISIT')}
+                    className="btn btn-outline"
+                    style={{
+                      display: 'flex',
+                      alignItems: 'center',
+                      gap: '0.4rem',
+                      borderColor: '#0284c7',
+                      color: '#0369a1',
+                      backgroundColor: '#e0f2fe',
+                      fontWeight: 700,
+                      whiteSpace: 'nowrap',
+                    }}
+                  >
+                    <Navigation size={16} color="#0284c7" />
+                    {locLoading ? 'Locating...' : '📍 Use Current Location'}
+                  </button>
                 </div>
+
+                {locSuccessMsg && serviceMode === 'LAB_VISIT' && (
+                  <div style={{ backgroundColor: '#f0fdf4', border: '1px solid #bbf7d0', color: '#166534', padding: '0.65rem 1rem', borderRadius: '8px', marginBottom: '1.25rem', fontSize: '0.85rem', fontWeight: 600 }}>
+                    {locSuccessMsg}
+                  </div>
+                )}
+
+                {locErrorMsg && serviceMode === 'LAB_VISIT' && (
+                  <div style={{ backgroundColor: '#fffbebf0', border: '1px solid #fde68a', color: '#92400e', padding: '0.65rem 1rem', borderRadius: '8px', marginBottom: '1.25rem', fontSize: '0.85rem', fontWeight: 600 }}>
+                    ⚠️ {locErrorMsg}
+                  </div>
+                )}
 
                 <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem', marginBottom: '2.5rem', maxHeight: '350px', overflowY: 'auto' }}>
                   {filteredLabs.map((l) => {

@@ -2,20 +2,23 @@ import React, { useEffect, useState } from 'react';
 import { Link, useNavigate, useParams } from 'react-router-dom';
 import api from '../api/client';
 import { LabProfile } from '../types';
-import { FlaskConical, MapPin, CheckCircle2, ShieldCheck, Home, ArrowRight } from 'lucide-react';
+import { FlaskConical, MapPin, CheckCircle2, ShieldCheck, Home, ArrowRight, Navigation } from 'lucide-react';
 
 export const LabsPage: React.FC = () => {
   const [labs, setLabs] = useState<LabProfile[]>([]);
   const [searchCity, setSearchCity] = useState('');
   const [homeCollectionOnly, setHomeCollectionOnly] = useState(false);
   const [loading, setLoading] = useState(true);
+  const [locLoading, setLocLoading] = useState(false);
+  const [locStatus, setLocStatus] = useState('');
   const navigate = useNavigate();
 
-  const fetchLabs = async () => {
+  const fetchLabs = async (overrideCity?: string) => {
     setLoading(true);
     try {
       let query = '/labs?';
-      if (searchCity) query += `city=${encodeURIComponent(searchCity)}&`;
+      const cityToUse = overrideCity !== undefined ? overrideCity : searchCity;
+      if (cityToUse) query += `city=${encodeURIComponent(cityToUse)}&`;
       if (homeCollectionOnly) query += `homeSampleCollection=true&`;
 
       const res = await api.get(query);
@@ -27,6 +30,44 @@ export const LabsPage: React.FC = () => {
     } finally {
       setLoading(false);
     }
+  };
+
+  const handleUseCurrentLocation = () => {
+    setLocStatus('');
+    if (!navigator.geolocation) {
+      setLocStatus('Geolocation is not supported by your browser.');
+      return;
+    }
+    setLocLoading(true);
+
+    navigator.geolocation.getCurrentPosition(
+      async (position) => {
+        const lat = position.coords.latitude;
+        const lng = position.coords.longitude;
+        try {
+          const res = await fetch(`https://nominatim.openstreetmap.org/reverse?format=json&lat=${lat}&lon=${lng}`);
+          const data = await res.json();
+          if (data && data.address) {
+            const detectedCity = data.address.city || data.address.town || data.address.village || data.address.suburb || 'Metropolis';
+            setSearchCity(detectedCity);
+            setLocStatus(`📍 Nearby labs in ${detectedCity} (${lat.toFixed(4)}, ${lng.toFixed(4)})`);
+            fetchLabs(detectedCity);
+          } else {
+            fetchLabs();
+          }
+        } catch (err) {
+          fetchLabs();
+        } finally {
+          setLocLoading(false);
+        }
+      },
+      (err) => {
+        setLocLoading(false);
+        let msg = 'Location access denied or unavailable. Please search labs manually.';
+        if (err.code === 1) msg = 'Location permission denied. Please enter lab city manually.';
+        setLocStatus(msg);
+      }
+    );
   };
 
   useEffect(() => {
@@ -48,22 +89,39 @@ export const LabsPage: React.FC = () => {
       </div>
 
       {/* Filter Bar */}
-      <div style={{ backgroundColor: 'white', padding: '1.25rem 1.5rem', borderRadius: 'var(--radius-md)', border: '1px solid var(--border)', boxShadow: 'var(--shadow-sm)', marginBottom: '2.5rem', display: 'flex', gap: '1.5rem', flexWrap: 'wrap', alignItems: 'center', justifyContent: 'space-between' }}>
-        <div style={{ flex: 1, maxWidth: '400px' }}>
+      <div style={{ backgroundColor: 'white', padding: '1.25rem 1.5rem', borderRadius: 'var(--radius-md)', border: '1px solid var(--border)', boxShadow: 'var(--shadow-sm)', marginBottom: '2.5rem', display: 'flex', gap: '1rem', flexWrap: 'wrap', alignItems: 'center' }}>
+        <div style={{ flex: 1, maxWidth: '350px' }}>
           <input
             type="text"
             placeholder="Search by city or location..."
             value={searchCity}
             onChange={(e) => setSearchCity(e.target.value)}
-            onBlur={fetchLabs}
+            onBlur={() => fetchLabs()}
             className="form-input"
           />
         </div>
+
+        <button
+          type="button"
+          disabled={locLoading}
+          onClick={handleUseCurrentLocation}
+          className="btn btn-outline btn-sm"
+          style={{ display: 'flex', alignItems: 'center', gap: '0.4rem', color: '#0369a1', borderColor: '#0284c7', backgroundColor: '#e0f2fe', fontWeight: 700 }}
+        >
+          <Navigation size={16} color="#0284c7" />
+          {locLoading ? 'Locating...' : '📍 Use Current Location'}
+        </button>
 
         <label style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', fontSize: '0.9rem', fontWeight: 600, cursor: 'pointer' }}>
           <input type="checkbox" checked={homeCollectionOnly} onChange={(e) => setHomeCollectionOnly(e.target.checked)} />
           <Home size={16} color="var(--primary)" /> Home Sample Collection Available
         </label>
+
+        {locStatus && (
+          <div style={{ width: '100%', fontSize: '0.85rem', color: locStatus.includes('denied') ? '#92400e' : '#166534', fontWeight: 600, marginTop: '0.25rem' }}>
+            {locStatus}
+          </div>
+        )}
       </div>
 
       {/* Labs Grid */}

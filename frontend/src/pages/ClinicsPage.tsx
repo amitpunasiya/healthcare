@@ -2,19 +2,22 @@ import React, { useEffect, useState } from 'react';
 import { Link, useNavigate, useParams } from 'react-router-dom';
 import api from '../api/client';
 import { ClinicProfile } from '../types';
-import { Building2, MapPin, Phone, ShieldCheck, CheckCircle2, ArrowRight } from 'lucide-react';
+import { Building2, MapPin, Phone, ShieldCheck, CheckCircle2, ArrowRight, Navigation } from 'lucide-react';
 
 export const ClinicsPage: React.FC = () => {
   const [clinics, setClinics] = useState<ClinicProfile[]>([]);
   const [searchCity, setSearchCity] = useState('');
   const [loading, setLoading] = useState(true);
+  const [locLoading, setLocLoading] = useState(false);
+  const [locStatus, setLocStatus] = useState('');
   const navigate = useNavigate();
 
-  const fetchClinics = async () => {
+  const fetchClinics = async (overrideCity?: string) => {
     setLoading(true);
     try {
       let query = '/clinics?';
-      if (searchCity) query += `city=${encodeURIComponent(searchCity)}&`;
+      const cityToUse = overrideCity !== undefined ? overrideCity : searchCity;
+      if (cityToUse) query += `city=${encodeURIComponent(cityToUse)}&`;
 
       const res = await api.get(query);
       if (res.data.success) {
@@ -25,6 +28,44 @@ export const ClinicsPage: React.FC = () => {
     } finally {
       setLoading(false);
     }
+  };
+
+  const handleUseCurrentLocation = () => {
+    setLocStatus('');
+    if (!navigator.geolocation) {
+      setLocStatus('Geolocation is not supported by your browser.');
+      return;
+    }
+    setLocLoading(true);
+
+    navigator.geolocation.getCurrentPosition(
+      async (position) => {
+        const lat = position.coords.latitude;
+        const lng = position.coords.longitude;
+        try {
+          const res = await fetch(`https://nominatim.openstreetmap.org/reverse?format=json&lat=${lat}&lon=${lng}`);
+          const data = await res.json();
+          if (data && data.address) {
+            const detectedCity = data.address.city || data.address.town || data.address.village || data.address.suburb || 'Metropolis';
+            setSearchCity(detectedCity);
+            setLocStatus(`📍 Nearby clinics in ${detectedCity} (${lat.toFixed(4)}, ${lng.toFixed(4)})`);
+            fetchClinics(detectedCity);
+          } else {
+            fetchClinics();
+          }
+        } catch (err) {
+          fetchClinics();
+        } finally {
+          setLocLoading(false);
+        }
+      },
+      (err) => {
+        setLocLoading(false);
+        let msg = 'Location access denied or unavailable. Please enter city manually.';
+        if (err.code === 1) msg = 'Location permission denied. Please search clinic location manually.';
+        setLocStatus(msg);
+      }
+    );
   };
 
   useEffect(() => {
@@ -46,20 +87,38 @@ export const ClinicsPage: React.FC = () => {
       </div>
 
       {/* Filter Bar */}
-      <div style={{ backgroundColor: 'white', padding: '1.25rem 1.5rem', borderRadius: 'var(--radius-md)', border: '1px solid var(--border)', boxShadow: 'var(--shadow-sm)', marginBottom: '2.5rem', display: 'flex', gap: '1rem', alignItems: 'center' }}>
+      <div style={{ backgroundColor: 'white', padding: '1.25rem 1.5rem', borderRadius: 'var(--radius-md)', border: '1px solid var(--border)', boxShadow: 'var(--shadow-sm)', marginBottom: '2.5rem', display: 'flex', gap: '1rem', flexWrap: 'wrap', alignItems: 'center' }}>
         <div style={{ flex: 1, maxWidth: '400px' }}>
           <input
             type="text"
             placeholder="Search by city or location..."
             value={searchCity}
             onChange={(e) => setSearchCity(e.target.value)}
-            onBlur={fetchClinics}
+            onBlur={() => fetchClinics()}
             className="form-input"
           />
         </div>
-        <button onClick={fetchClinics} className="btn btn-primary btn-sm">
+
+        <button
+          type="button"
+          disabled={locLoading}
+          onClick={handleUseCurrentLocation}
+          className="btn btn-outline btn-sm"
+          style={{ display: 'flex', alignItems: 'center', gap: '0.4rem', color: '#0f766e', borderColor: '#0d9488', backgroundColor: '#ccfbf1', fontWeight: 700 }}
+        >
+          <Navigation size={16} color="#0d9488" />
+          {locLoading ? 'Locating...' : '📍 Use Current Location'}
+        </button>
+
+        <button onClick={() => fetchClinics()} className="btn btn-primary btn-sm">
           Filter Clinics
         </button>
+
+        {locStatus && (
+          <div style={{ width: '100%', fontSize: '0.85rem', color: locStatus.includes('denied') ? '#92400e' : '#166534', fontWeight: 600, marginTop: '0.25rem' }}>
+            {locStatus}
+          </div>
+        )}
       </div>
 
       {/* Clinics Grid */}

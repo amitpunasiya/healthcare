@@ -97,7 +97,10 @@ export const ClinicsPage: React.FC = () => {
                   View Clinic
                 </Link>
                 <button
-                  onClick={() => navigate(`/services/physiotherapy`)}
+                  onClick={() => {
+                    const cUserId = c.userId?._id || c.userId;
+                    navigate(`/book?mode=CLINIC_VISIT&clinicId=${cUserId}`);
+                  }}
                   className="btn btn-primary btn-sm"
                   style={{ flex: 1, justifyContent: 'center' }}
                 >
@@ -184,7 +187,14 @@ export const ClinicProfilePage: React.FC = () => {
               ))}
             </div>
 
-            <button onClick={() => navigate('/services/physiotherapy')} className="btn btn-primary btn-lg" style={{ width: '100%', marginTop: '1.5rem', justifyContent: 'center' }}>
+            <button
+              onClick={() => {
+                const cUserId = clinic.userId?._id || clinic.userId;
+                navigate(`/book?mode=CLINIC_VISIT&clinicId=${cUserId}`);
+              }}
+              className="btn btn-primary btn-lg"
+              style={{ width: '100%', marginTop: '1.5rem', justifyContent: 'center' }}
+            >
               Book Clinic Appointment <ArrowRight size={18} />
             </button>
           </div>

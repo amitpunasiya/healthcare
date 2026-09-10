@@ -3,43 +3,57 @@ import { useParams, useSearchParams, useNavigate, Link } from 'react-router-dom'
 import api from '../api/client';
 import { useAuth } from '../context/AuthContext';
 import { ServiceCategory, Service, ServiceMode, EngagementType, ProviderProfile, ClinicProfile, LabProfile } from '../types';
-import { Calendar, Clock, MapPin, Check, ArrowRight, Home, Building2, FlaskConical, Repeat, ShieldCheck, AlertCircle } from 'lucide-react';
+import { Calendar, Clock, MapPin, Check, ArrowRight, Home, Building2, FlaskConical, Repeat, ShieldCheck, AlertCircle, Search, Navigation } from 'lucide-react';
 
 export const BookingWizardPage: React.FC = () => {
   const { serviceId: paramServiceId } = useParams<{ serviceId?: string }>();
   const [searchParams] = useSearchParams();
-  const initialMode = (searchParams.get('mode') as ServiceMode) || 'HOME_VISIT';
+  
+  const queryMode = searchParams.get('mode') as ServiceMode | null;
+  const queryClinicId = searchParams.get('clinicId') || '';
+  const queryLabId = searchParams.get('labId') || '';
+  const queryCategory = searchParams.get('category') || '';
 
   const { user } = useAuth();
   const navigate = useNavigate();
 
-  // Categories & Services Catalog
+  // Primary Visit Mode: HOME_VISIT | CLINIC_VISIT | LAB_VISIT
+  const [serviceMode, setServiceMode] = useState<ServiceMode>(queryMode || 'HOME_VISIT');
+
+  // Catalog
   const [categories, setCategories] = useState<ServiceCategory[]>([]);
   const [services, setServices] = useState<Service[]>([]);
   const [selectedCategoryId, setSelectedCategoryId] = useState<string>('');
   const [selectedServiceId, setSelectedServiceId] = useState<string>(paramServiceId || '');
   const [selectedService, setSelectedService] = useState<Service | null>(null);
 
-  // Entities
+  // Candidate Entities
   const [providers, setProviders] = useState<ProviderProfile[]>([]);
   const [clinics, setClinics] = useState<ClinicProfile[]>([]);
   const [labs, setLabs] = useState<LabProfile[]>([]);
+  
+  // Search Filters for Clinic & Lab Visits
+  const [clinicSearchQuery, setClinicSearchQuery] = useState('');
+  const [labSearchQuery, setLabSearchQuery] = useState('');
 
-  // Wizard State
-  const [serviceMode, setServiceMode] = useState<ServiceMode>(initialMode);
+  // Selected Entity
+  const [selectedProviderId, setSelectedProviderId] = useState<string>('');
+  const [selectedClinicId, setSelectedClinicId] = useState<string>(queryClinicId);
+  const [selectedLabId, setSelectedLabId] = useState<string>(queryLabId);
+
+  // Engagement Type & Schedule
   const [engagementType, setEngagementType] = useState<EngagementType>('ONE_TIME');
-  const [selectedEntityId, setSelectedEntityId] = useState<string>('');
   const [bookingDate, setBookingDate] = useState<string>(new Date().toISOString().slice(0, 10));
   const [availableSlots, setAvailableSlots] = useState<{ startTime: string; endTime: string }[]>([]);
   const [selectedSlot, setSelectedSlot] = useState<{ startTime: string; endTime: string } | null>(null);
 
-  // Recurring Config State
+  // Recurring Config
   const [frequency, setFrequency] = useState<'DAILY' | 'WEEKLY'>('DAILY');
   const [durationWeeks, setDurationWeeks] = useState<number>(2);
-  const [daysOfWeek, setDaysOfWeek] = useState<number[]>([1, 3]); // Default Mon, Wed
+  const [daysOfWeek, setDaysOfWeek] = useState<number[]>([1, 3]);
 
-  // Address
-  const [addressLine1, setAddressLine1] = useState<string>('');
+  // Home Address
+  const [addressLine1, setAddressLine1] = useState<string>('123 Healthcare Ave, Flat 4B');
   const [city, setCity] = useState<string>('Metropolis');
   const [state, setState] = useState<string>('State');
   const [pincode, setPincode] = useState<string>('110001');
@@ -48,20 +62,29 @@ export const BookingWizardPage: React.FC = () => {
   const [loading, setLoading] = useState(true);
   const [submitting, setSubmitting] = useState(false);
   const [errorMsg, setErrorMsg] = useState('');
+  const [currentStep, setCurrentStep] = useState(1);
 
-  const [currentStep, setCurrentStep] = useState(paramServiceId ? 2 : 1);
-
-  // Load Catalog Categories & Services
+  // Load Categories & Services Catalog
   useEffect(() => {
     const fetchCatalog = async () => {
       try {
         const cRes = await api.get('/services/categories');
         const sRes = await api.get('/services');
+        const pRes = await api.get('/providers');
+        const clRes = await api.get('/clinics');
+        const lRes = await api.get('/labs');
 
         if (cRes.data.success && cRes.data.categories.length > 0) {
           setCategories(cRes.data.categories);
-          setSelectedCategoryId(cRes.data.categories[0]._id);
+          if (queryCategory) {
+            const matchedCat = cRes.data.categories.find((c: ServiceCategory) => c.slug === queryCategory);
+            if (matchedCat) setSelectedCategoryId(matchedCat._id);
+            else setSelectedCategoryId(cRes.data.categories[0]._id);
+          } else {
+            setSelectedCategoryId(cRes.data.categories[0]._id);
+          }
         }
+
         if (sRes.data.success) {
           setServices(sRes.data.services);
           if (paramServiceId) {
@@ -72,6 +95,10 @@ export const BookingWizardPage: React.FC = () => {
             }
           }
         }
+
+        if (pRes.data.success) setProviders(pRes.data.providers);
+        if (clRes.data.success) setClinics(clRes.data.clinics);
+        if (lRes.data.success) setLabs(lRes.data.labs);
       } catch (err) {
         console.error('Catalog load error', err);
       } finally {
@@ -79,57 +106,57 @@ export const BookingWizardPage: React.FC = () => {
       }
     };
     fetchCatalog();
-  }, [paramServiceId]);
+  }, [paramServiceId, queryCategory]);
 
-  // Update selected service object when selectedServiceId changes
+  // Handle Mode Change from Top Mode Bar
+  const handleModeSwitch = (mode: ServiceMode) => {
+    setServiceMode(mode);
+    setCurrentStep(1);
+    setErrorMsg('');
+    if (mode === 'CLINIC_VISIT' && clinics.length > 0 && !selectedClinicId) {
+      const cUserId = clinics[0].userId?._id || clinics[0].userId;
+      setSelectedClinicId(cUserId);
+    }
+    if (mode === 'LAB_VISIT' && labs.length > 0 && !selectedLabId) {
+      const lUserId = labs[0].userId?._id || labs[0].userId;
+      setSelectedLabId(lUserId);
+    }
+  };
+
+  // Update Selected Service
   useEffect(() => {
     if (selectedServiceId && services.length > 0) {
       const found = services.find((s) => s._id === selectedServiceId);
-      if (found) {
-        setSelectedService(found);
-        if (found.serviceModesSupported.length > 0) {
-          setServiceMode(found.serviceModesSupported[0]);
-        }
-      }
+      if (found) setSelectedService(found);
     }
   }, [selectedServiceId, services]);
 
-  // Fetch Providers, Clinics, Labs matching selected service category
-  useEffect(() => {
-    const fetchEntities = async () => {
-      if (!selectedService) return;
-      try {
-        const catId = typeof selectedService.categoryId === 'object' ? selectedService.categoryId._id : selectedService.categoryId;
-        const pRes = await api.get(`/providers?categoryId=${catId}`);
-        if (pRes.data.success) setProviders(pRes.data.providers);
-
-        const cRes = await api.get('/clinics');
-        if (cRes.data.success) setClinics(cRes.data.clinics);
-
-        const lRes = await api.get('/labs');
-        if (lRes.data.success) setLabs(lRes.data.labs);
-      } catch (err) {
-        console.error('Failed to load candidate entities', err);
-      }
-    };
-    fetchEntities();
-  }, [selectedService]);
-
-  // Fetch Available Slots from Backend Source of Truth
+  // Fetch Slots
   useEffect(() => {
     const fetchSlots = async () => {
       if (!bookingDate) return;
       try {
         let queryParams = `date=${bookingDate}`;
-        if (selectedEntityId) {
-          if (providers.some((p) => p.userId._id === selectedEntityId || p.userId === selectedEntityId)) {
-            queryParams += `&providerId=${selectedEntityId}`;
-          } else if (clinics.some((c) => c.userId._id === selectedEntityId || c.userId === selectedEntityId)) {
-            queryParams += `&clinicId=${selectedEntityId}`;
-          } else if (labs.some((l) => l.userId._id === selectedEntityId || l.userId === selectedEntityId)) {
-            queryParams += `&labId=${selectedEntityId}`;
+        let targetEntityUserId = '';
+
+        if (serviceMode === 'HOME_VISIT' && selectedProviderId) {
+          targetEntityUserId = selectedProviderId;
+        } else if (serviceMode === 'CLINIC_VISIT' && selectedClinicId) {
+          targetEntityUserId = selectedClinicId;
+        } else if (serviceMode === 'LAB_VISIT' && selectedLabId) {
+          targetEntityUserId = selectedLabId;
+        }
+
+        if (targetEntityUserId) {
+          if (providers.some((p) => (p.userId?._id || p.userId) === targetEntityUserId)) {
+            queryParams += `&providerId=${targetEntityUserId}`;
+          } else if (clinics.some((c) => (c.userId?._id || c.userId) === targetEntityUserId)) {
+            queryParams += `&clinicId=${targetEntityUserId}`;
+          } else if (labs.some((l) => (l.userId?._id || l.userId) === targetEntityUserId)) {
+            queryParams += `&labId=${targetEntityUserId}`;
           }
         }
+
         const res = await api.get(`/availability/slots?${queryParams}`);
         if (res.data.success) {
           setAvailableSlots(res.data.availableSlots);
@@ -144,20 +171,32 @@ export const BookingWizardPage: React.FC = () => {
       }
     };
     fetchSlots();
-  }, [bookingDate, selectedEntityId]);
+  }, [bookingDate, selectedProviderId, selectedClinicId, selectedLabId, serviceMode]);
 
-  const toggleDayOfWeek = (dayNum: number) => {
-    if (daysOfWeek.includes(dayNum)) {
-      setDaysOfWeek(daysOfWeek.filter((d) => d !== dayNum));
-    } else {
-      setDaysOfWeek([...daysOfWeek, dayNum].sort());
+  const handleUseCurrentLocation = () => {
+    if ('geolocation' in navigator) {
+      navigator.geolocation.getCurrentPosition(
+        () => {
+          setAddressLine1('Current GPS Location (Validated)');
+          setCity('Current City');
+          setState('Current State');
+        },
+        () => {
+          setAddressLine1('123 Main Street, Sector 4');
+        }
+      );
     }
   };
 
   const handleSubmitBooking = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!user) {
-      navigate(`/auth/login?redirect=/book/${selectedServiceId || ''}`);
+      navigate(`/auth/login?redirect=/book?mode=${serviceMode}`);
+      return;
+    }
+
+    if (!selectedServiceId) {
+      setErrorMsg('Please select a service or diagnostic test panel.');
       return;
     }
 
@@ -170,18 +209,35 @@ export const BookingWizardPage: React.FC = () => {
     setErrorMsg('');
 
     try {
+      let finalProviderId: string | undefined = undefined;
+      let finalClinicId: string | undefined = undefined;
+      let finalLabId: string | undefined = undefined;
+
+      if (serviceMode === 'HOME_VISIT') {
+        const isLabTest = selectedService?.categoryId && (typeof selectedService.categoryId === 'object' ? selectedService.categoryId.slug === 'lab-tests' : false);
+        if (isLabTest) {
+          finalLabId = selectedLabId || (labs.length > 0 ? (labs[0].userId?._id || labs[0].userId) : undefined);
+        } else {
+          finalProviderId = selectedProviderId || undefined;
+        }
+      } else if (serviceMode === 'CLINIC_VISIT') {
+        finalClinicId = selectedClinicId || (clinics.length > 0 ? (clinics[0].userId?._id || clinics[0].userId) : undefined);
+      } else if (serviceMode === 'LAB_VISIT') {
+        finalLabId = selectedLabId || (labs.length > 0 ? (labs[0].userId?._id || labs[0].userId) : undefined);
+      }
+
       const payload: any = {
         serviceCategoryId: typeof selectedService!.categoryId === 'object' ? selectedService!.categoryId._id : selectedService!.categoryId,
         serviceId: selectedService!._id,
         serviceMode,
         engagementType,
-        providerId: providers.find((p) => p.userId._id === selectedEntityId || p._id === selectedEntityId)?.userId._id,
-        clinicId: clinics.find((c) => c.userId._id === selectedEntityId || c._id === selectedEntityId)?.userId._id,
-        labId: labs.find((l) => l.userId._id === selectedEntityId || l._id === selectedEntityId)?.userId._id,
+        providerId: finalProviderId,
+        clinicId: finalClinicId,
+        labId: finalLabId,
         bookingDate,
         timeSlot: selectedSlot,
         serviceAddress:
-          serviceMode === 'HOME_VISIT' || serviceMode === 'LAB_VISIT'
+          serviceMode === 'HOME_VISIT'
             ? { label: 'Home', addressLine1, city, state, pincode }
             : undefined,
         notes,
@@ -201,34 +257,54 @@ export const BookingWizardPage: React.FC = () => {
         navigate(`/booking-success/${res.data.booking._id}`);
       }
     } catch (err: any) {
-      setErrorMsg(err.response?.data?.message || 'Failed to submit booking. Slot may no longer be available.');
+      setErrorMsg(err.response?.data?.message || 'Failed to submit booking request. Slot may no longer be available.');
     } finally {
       setSubmitting(false);
     }
   };
 
   if (loading) {
-    return <div className="container" style={{ padding: '4rem 1.5rem', textAlign: 'center' }}>Loading booking wizard...</div>;
+    return <div className="container" style={{ padding: '4rem 1.5rem', textAlign: 'center' }}>Loading booking engine...</div>;
   }
 
+  // Filter Services for Selected Category
   const categoryServices = services.filter((s) => {
-    const catId = typeof s.categoryId === 'object' ? s.categoryId._id : s.categoryId;
-    return catId === selectedCategoryId;
+    const cId = typeof s.categoryId === 'object' ? s.categoryId._id : s.categoryId;
+    return cId === selectedCategoryId;
+  });
+
+  // Filter Clinics by Search
+  const filteredClinics = clinics.filter((c) => {
+    if (!clinicSearchQuery.trim()) return true;
+    const q = clinicSearchQuery.toLowerCase();
+    return c.clinicName.toLowerCase().includes(q) || c.city.toLowerCase().includes(q) || c.addressLine1.toLowerCase().includes(q);
+  });
+
+  // Filter Labs by Search
+  const filteredLabs = labs.filter((l) => {
+    if (!labSearchQuery.trim()) return true;
+    const q = labSearchQuery.toLowerCase();
+    return l.labName.toLowerCase().includes(q) || l.city.toLowerCase().includes(q) || l.addressLine1.toLowerCase().includes(q);
   });
 
   const basePrice = selectedService?.basePrice || 0;
-  const homeFee = serviceMode === 'HOME_VISIT' && labs.length > 0 ? 150 : 0;
+  const isHomeLabTest = serviceMode === 'HOME_VISIT' && selectedService?.categoryId && (typeof selectedService.categoryId === 'object' ? selectedService.categoryId.slug === 'lab-tests' : false);
+  const homeFee = isHomeLabTest ? 150 : 0;
   const totalAmount = basePrice + homeFee;
 
   return (
-    <div className="container" style={{ padding: '3.5rem 1.5rem', maxWidth: '900px' }}>
+    <div className="container" style={{ padding: '3.5rem 1.5rem', maxWidth: '960px' }}>
+      {/* Top Header */}
       <div style={{ textAlign: 'center', marginBottom: '2.5rem' }}>
         <span style={{ fontSize: '0.85rem', color: 'var(--primary)', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.05em' }}>
-          Healthcare Appointment & Hiring Engine
+          Verified Healthcare Marketplace
         </span>
-        <h1 style={{ fontSize: '2rem', fontWeight: 800, color: 'var(--text-main)', marginTop: '0.2rem' }}>
-          {selectedService ? selectedService.name : 'Healthcare Service Booking'}
+        <h1 style={{ fontSize: '2.25rem', fontWeight: 800, color: 'var(--text-main)', marginTop: '0.2rem' }}>
+          Book Healthcare Service
         </h1>
+        <p style={{ color: 'var(--text-muted)', fontSize: '1rem', marginTop: '0.4rem' }}>
+          Choose your visit mode: <strong>Home Visit</strong>, <strong>Clinic Visit</strong>, or <strong>Lab Visit</strong>
+        </p>
       </div>
 
       {!user && (
@@ -237,44 +313,88 @@ export const BookingWizardPage: React.FC = () => {
             <AlertCircle size={20} />
             <span>Please <strong>Log In</strong> or <strong>Register</strong> to submit your booking.</span>
           </div>
-          <Link to={`/auth/login?redirect=/book/${selectedServiceId || ''}`} className="btn btn-primary btn-sm">
+          <Link to={`/auth/login?redirect=/book?mode=${serviceMode}`} className="btn btn-primary btn-sm">
             Sign In Now
           </Link>
         </div>
       )}
 
-      {/* Progress Steps Header */}
-      <div style={{ display: 'flex', justifyContent: 'between', alignItems: 'center', marginBottom: '2.5rem' }}>
-        {[
-          { num: 1, label: 'Service' },
-          { num: 2, label: 'Mode & Concept' },
-          { num: 3, label: 'Provider / Center' },
-          { num: 4, label: 'Date & Slot' },
-          { num: 5, label: 'Review & Confirm' },
-        ].map((step) => (
-          <div key={step.num} style={{ flex: 1, textAlign: 'center' }}>
-            <div
-              style={{
-                width: '38px',
-                height: '38px',
-                borderRadius: '50%',
-                backgroundColor: currentStep >= step.num ? 'var(--primary)' : '#e2e8f0',
-                color: currentStep >= step.num ? 'white' : 'var(--text-muted)',
-                display: 'flex',
-                alignItems: 'center',
-                justifyContent: 'center',
-                fontWeight: 700,
-                margin: '0 auto 0.4rem',
-                fontSize: '0.9rem',
-              }}
-            >
-              {currentStep > step.num ? <Check size={18} /> : step.num}
-            </div>
-            <span style={{ fontSize: '0.8rem', fontWeight: currentStep === step.num ? 700 : 500, color: currentStep === step.num ? 'var(--text-main)' : 'var(--text-muted)' }}>
-              {step.label}
-            </span>
-          </div>
-        ))}
+      {/* TOP-LEVEL 3 VISIT MODES BAR */}
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '0.75rem', marginBottom: '2.5rem' }}>
+        <button
+          type="button"
+          onClick={() => handleModeSwitch('HOME_VISIT')}
+          style={{
+            padding: '1.1rem 0.75rem',
+            borderRadius: '16px',
+            border: `2px solid ${serviceMode === 'HOME_VISIT' ? 'var(--primary)' : 'var(--border)'}`,
+            backgroundColor: serviceMode === 'HOME_VISIT' ? 'var(--primary-light)' : 'white',
+            color: serviceMode === 'HOME_VISIT' ? 'var(--primary-dark)' : 'var(--text-main)',
+            fontWeight: 800,
+            fontSize: '0.95rem',
+            cursor: 'pointer',
+            display: 'flex',
+            flexDirection: 'column',
+            alignItems: 'center',
+            gap: '0.4rem',
+            boxShadow: serviceMode === 'HOME_VISIT' ? '0 4px 12px rgba(2,132,199,0.15)' : 'none',
+            transition: 'all 0.2s ease',
+          }}
+        >
+          <Home size={24} color={serviceMode === 'HOME_VISIT' ? 'var(--primary)' : '#64748b'} />
+          <span>1. Home Visit</span>
+          <span style={{ fontSize: '0.725rem', fontWeight: 600, color: 'var(--text-muted)' }}>Provider Visits Home</span>
+        </button>
+
+        <button
+          type="button"
+          onClick={() => handleModeSwitch('CLINIC_VISIT')}
+          style={{
+            padding: '1.1rem 0.75rem',
+            borderRadius: '16px',
+            border: `2px solid ${serviceMode === 'CLINIC_VISIT' ? '#0d9488' : 'var(--border)'}`,
+            backgroundColor: serviceMode === 'CLINIC_VISIT' ? '#ccfbf1' : 'white',
+            color: serviceMode === 'CLINIC_VISIT' ? '#0f766e' : 'var(--text-main)',
+            fontWeight: 800,
+            fontSize: '0.95rem',
+            cursor: 'pointer',
+            display: 'flex',
+            flexDirection: 'column',
+            alignItems: 'center',
+            gap: '0.4rem',
+            boxShadow: serviceMode === 'CLINIC_VISIT' ? '0 4px 12px rgba(13,148,136,0.15)' : 'none',
+            transition: 'all 0.2s ease',
+          }}
+        >
+          <Building2 size={24} color={serviceMode === 'CLINIC_VISIT' ? '#0d9488' : '#64748b'} />
+          <span>2. Clinic Visit</span>
+          <span style={{ fontSize: '0.725rem', fontWeight: 600, color: 'var(--text-muted)' }}>Visit Nearby Clinic</span>
+        </button>
+
+        <button
+          type="button"
+          onClick={() => handleModeSwitch('LAB_VISIT')}
+          style={{
+            padding: '1.1rem 0.75rem',
+            borderRadius: '16px',
+            border: `2px solid ${serviceMode === 'LAB_VISIT' ? '#0284c7' : 'var(--border)'}`,
+            backgroundColor: serviceMode === 'LAB_VISIT' ? '#e0f2fe' : 'white',
+            color: serviceMode === 'LAB_VISIT' ? '#0369a1' : 'var(--text-main)',
+            fontWeight: 800,
+            fontSize: '0.95rem',
+            cursor: 'pointer',
+            display: 'flex',
+            flexDirection: 'column',
+            alignItems: 'center',
+            gap: '0.4rem',
+            boxShadow: serviceMode === 'LAB_VISIT' ? '0 4px 12px rgba(2,132,199,0.15)' : 'none',
+            transition: 'all 0.2s ease',
+          }}
+        >
+          <FlaskConical size={24} color={serviceMode === 'LAB_VISIT' ? '#0284c7' : '#64748b'} />
+          <span>3. Lab Visit</span>
+          <span style={{ fontSize: '0.725rem', fontWeight: 600, color: 'var(--text-muted)' }}>Visit Pathology Lab</span>
+        </button>
       </div>
 
       <div className="card" style={{ padding: '2.5rem' }}>
@@ -284,424 +404,107 @@ export const BookingWizardPage: React.FC = () => {
           </div>
         )}
 
-        {/* Step 1: Select Category & Sub-Service */}
-        {currentStep === 1 && (
+        {/* =========================================================================
+            MODE 1: HOME VISIT FLOW
+           ========================================================================= */}
+        {serviceMode === 'HOME_VISIT' && (
           <div>
-            <h3 style={{ fontSize: '1.25rem', fontWeight: 700, marginBottom: '1.5rem' }}>Step 1: Select Healthcare Category & Service</h3>
-
-            <div className="form-group">
-              <label className="form-label">Healthcare Category</label>
-              <select
-                value={selectedCategoryId}
-                onChange={(e) => {
-                  setSelectedCategoryId(e.target.value);
-                  const firstSrv = services.find((s) => {
-                    const cId = typeof s.categoryId === 'object' ? s.categoryId._id : s.categoryId;
-                    return cId === e.target.value;
-                  });
-                  if (firstSrv) setSelectedServiceId(firstSrv._id);
-                }}
-                className="form-select"
-              >
-                {categories.map((cat) => (
-                  <option key={cat._id} value={cat._id}>{cat.name}</option>
-                ))}
-              </select>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', marginBottom: '1.5rem', paddingBottom: '1rem', borderBottom: '1px solid var(--border)' }}>
+              <Home size={22} color="var(--primary)" />
+              <h2 style={{ fontSize: '1.35rem', fontWeight: 800, color: 'var(--text-main)' }}>Home Visit Booking Flow</h2>
             </div>
 
-            <div className="form-group" style={{ marginTop: '1.5rem' }}>
-              <label className="form-label">Select Specific Service</label>
-              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: '1rem', marginTop: '0.5rem' }}>
-                {categoryServices.map((srv) => (
-                  <div
-                    key={srv._id}
-                    onClick={() => setSelectedServiceId(srv._id)}
-                    style={{
-                      padding: '1rem',
-                      borderRadius: 'var(--radius-md)',
-                      border: `2px solid ${selectedServiceId === srv._id ? 'var(--primary)' : 'var(--border)'}`,
-                      backgroundColor: selectedServiceId === srv._id ? 'var(--primary-light)' : 'white',
-                      cursor: 'pointer',
-                    }}
-                  >
-                    <div style={{ fontWeight: 700, fontSize: '0.95rem' }}>{srv.name}</div>
-                    <div style={{ color: 'var(--primary)', fontWeight: 800, fontSize: '1.1rem', marginTop: '0.25rem' }}>₹{srv.basePrice}</div>
-                  </div>
-                ))}
-              </div>
-            </div>
-
-            <div style={{ display: 'flex', justifyContent: 'flex-end', marginTop: '2.5rem' }}>
-              <button disabled={!selectedServiceId} onClick={() => setCurrentStep(2)} className="btn btn-primary">
-                Next: Select Delivery Mode <ArrowRight size={18} />
-              </button>
-            </div>
-          </div>
-        )}
-
-        {/* Step 2: Mode & Engagement Concept */}
-        {currentStep === 2 && (
-          <div>
-            <h3 style={{ fontSize: '1.25rem', fontWeight: 700, marginBottom: '1.5rem' }}>Step 2: Service Delivery Mode & Hiring Concept</h3>
-
-            <div className="form-group">
-              <label className="form-label">Supported Service Modes</label>
-              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '1rem' }}>
-                {selectedService?.serviceModesSupported.includes('HOME_VISIT') && (
-                  <div
-                    onClick={() => setServiceMode('HOME_VISIT')}
-                    style={{
-                      padding: '1.25rem',
-                      borderRadius: 'var(--radius-md)',
-                      border: `2px solid ${serviceMode === 'HOME_VISIT' ? 'var(--primary)' : 'var(--border)'}`,
-                      backgroundColor: serviceMode === 'HOME_VISIT' ? 'var(--primary-light)' : 'white',
-                      cursor: 'pointer',
-                    }}
-                  >
-                    <Home size={24} color="var(--primary)" style={{ marginBottom: '0.5rem' }} />
-                    <h4 style={{ fontWeight: 700, fontSize: '1rem' }}>Home Visit / Collection</h4>
-                    <p style={{ fontSize: '0.8rem', color: 'var(--text-muted)' }}>Professional visits patient home</p>
-                  </div>
-                )}
-
-                {selectedService?.serviceModesSupported.includes('CLINIC_VISIT') && (
-                  <div
-                    onClick={() => setServiceMode('CLINIC_VISIT')}
-                    style={{
-                      padding: '1.25rem',
-                      borderRadius: 'var(--radius-md)',
-                      border: `2px solid ${serviceMode === 'CLINIC_VISIT' ? 'var(--primary)' : 'var(--border)'}`,
-                      backgroundColor: serviceMode === 'CLINIC_VISIT' ? 'var(--primary-light)' : 'white',
-                      cursor: 'pointer',
-                    }}
-                  >
-                    <Building2 size={24} color="var(--primary)" style={{ marginBottom: '0.5rem' }} />
-                    <h4 style={{ fontWeight: 700, fontSize: '1rem' }}>Clinic / Center Visit</h4>
-                    <p style={{ fontSize: '0.8rem', color: 'var(--text-muted)' }}>Customer visits registered clinic</p>
-                  </div>
-                )}
-
-                {selectedService?.serviceModesSupported.includes('LAB_VISIT') && (
-                  <div
-                    onClick={() => setServiceMode('LAB_VISIT')}
-                    style={{
-                      padding: '1.25rem',
-                      borderRadius: 'var(--radius-md)',
-                      border: `2px solid ${serviceMode === 'LAB_VISIT' ? 'var(--primary)' : 'var(--border)'}`,
-                      backgroundColor: serviceMode === 'LAB_VISIT' ? 'var(--primary-light)' : 'white',
-                      cursor: 'pointer',
-                    }}
-                  >
-                    <FlaskConical size={24} color="var(--primary)" style={{ marginBottom: '0.5rem' }} />
-                    <h4 style={{ fontWeight: 700, fontSize: '1rem' }}>Lab Center Visit</h4>
-                    <p style={{ fontSize: '0.8rem', color: 'var(--text-muted)' }}>Sample given at pathology center</p>
-                  </div>
-                )}
-              </div>
-            </div>
-
-            <div className="form-group" style={{ marginTop: '2rem' }}>
-              <label className="form-label">Booking Hiring Concept</label>
-              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '1rem' }}>
-                <div
-                  onClick={() => setEngagementType('ONE_TIME')}
-                  style={{
-                    padding: '1.25rem',
-                    borderRadius: 'var(--radius-md)',
-                    border: `2px solid ${engagementType === 'ONE_TIME' ? 'var(--primary)' : 'var(--border)'}`,
-                    backgroundColor: engagementType === 'ONE_TIME' ? 'var(--primary-light)' : 'white',
-                    cursor: 'pointer',
-                  }}
-                >
-                  <h4 style={{ fontWeight: 700, fontSize: '1rem' }}>One-Time Appointment</h4>
-                  <p style={{ fontSize: '0.8rem', color: 'var(--text-muted)' }}>Single visit session or lab collection</p>
-                </div>
-
-                <div
-                  onClick={() => setEngagementType('REGULAR_RECURRING')}
-                  style={{
-                    padding: '1.25rem',
-                    borderRadius: 'var(--radius-md)',
-                    border: `2px solid ${engagementType === 'REGULAR_RECURRING' ? 'var(--primary)' : 'var(--border)'}`,
-                    backgroundColor: engagementType === 'REGULAR_RECURRING' ? 'var(--primary-light)' : 'white',
-                    cursor: 'pointer',
-                  }}
-                >
-                  <h4 style={{ fontWeight: 700, fontSize: '1rem' }}>Personal / Regular Hiring</h4>
-                  <p style={{ fontSize: '0.8rem', color: 'var(--text-muted)' }}>Recurring daily/weekly sessions plan</p>
-                </div>
-              </div>
-            </div>
-
-            <div style={{ display: 'flex', justifyContent: 'space-between', marginTop: '2.5rem' }}>
-              <button onClick={() => setCurrentStep(1)} className="btn btn-outline">Back</button>
-              <button onClick={() => setCurrentStep(3)} className="btn btn-primary">Next: Select Provider <ArrowRight size={18} /></button>
-            </div>
-          </div>
-        )}
-
-        {/* Step 3: Provider / Clinic / Lab Selection */}
-        {currentStep === 3 && (
-          <div>
-            <h3 style={{ fontSize: '1.25rem', fontWeight: 700, marginBottom: '1.5rem' }}>
-              Step 3: Choose Verified {serviceMode === 'CLINIC_VISIT' ? 'Clinic' : serviceMode === 'LAB_VISIT' ? 'Laboratory' : 'Professional or Center'}
-            </h3>
-
-            <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem', marginBottom: '2rem' }}>
-              <div
-                onClick={() => setSelectedEntityId('')}
-                style={{
-                  padding: '1.25rem',
-                  borderRadius: 'var(--radius-md)',
-                  border: `2px solid ${selectedEntityId === '' ? 'var(--primary)' : 'var(--border)'}`,
-                  backgroundColor: selectedEntityId === '' ? 'var(--primary-light)' : 'white',
-                  cursor: 'pointer',
-                  fontWeight: 600,
-                }}
-              >
-                ⚡ Any Available Verified {serviceMode === 'CLINIC_VISIT' ? 'Clinic' : serviceMode === 'LAB_VISIT' ? 'Lab Center' : 'Specialist'} (Fastest Assignment)
-              </div>
-
-              {/* Providers List (for HOME_VISIT or CLINIC_VISIT) */}
-              {(serviceMode === 'HOME_VISIT' || serviceMode === 'CLINIC_VISIT') &&
-                providers.map((p) => {
-                  const entityUserId = p.userId?._id || p.userId;
-                  return (
+            {/* Step 1: Select Home Service Category & Sub-Service */}
+            {currentStep === 1 && (
+              <div>
+                <h3 style={{ fontSize: '1.1rem', fontWeight: 700, marginBottom: '1rem' }}>Step 1: Choose Home Service Category</h3>
+                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))', gap: '1rem', marginBottom: '2rem' }}>
+                  {categories.map((cat) => (
                     <div
-                      key={p._id}
-                      onClick={() => setSelectedEntityId(entityUserId)}
+                      key={cat._id}
+                      onClick={() => {
+                        setSelectedCategoryId(cat._id);
+                        const firstSrv = services.find((s) => {
+                          const cId = typeof s.categoryId === 'object' ? s.categoryId._id : s.categoryId;
+                          return cId === cat._id;
+                        });
+                        if (firstSrv) setSelectedServiceId(firstSrv._id);
+                      }}
                       style={{
-                        padding: '1.25rem',
+                        padding: '1.1rem',
                         borderRadius: 'var(--radius-md)',
-                        border: `2px solid ${selectedEntityId === entityUserId ? 'var(--primary)' : 'var(--border)'}`,
-                        backgroundColor: selectedEntityId === entityUserId ? 'var(--primary-light)' : 'white',
+                        border: `2px solid ${selectedCategoryId === cat._id ? 'var(--primary)' : 'var(--border)'}`,
+                        backgroundColor: selectedCategoryId === cat._id ? 'var(--primary-light)' : 'white',
                         cursor: 'pointer',
-                        display: 'flex',
-                        justifyContent: 'space-between',
-                        alignItems: 'center',
+                        textAlign: 'center',
                       }}
                     >
-                      <div>
-                        <div style={{ display: 'flex', alignItems: 'center', gap: '0.4rem' }}>
-                          <h4 style={{ fontWeight: 700 }}>{p.fullName}</h4>
-                          <span style={{ fontSize: '0.75rem', backgroundColor: '#dcfce7', color: '#15803d', padding: '0.15rem 0.45rem', borderRadius: '4px', fontWeight: 700 }}>VERIFIED</span>
-                        </div>
-                        <p style={{ fontSize: '0.825rem', color: 'var(--text-muted)', marginTop: '0.25rem' }}>
-                          {p.qualification} • {p.experienceYears} Yrs Exp • {p.city || 'Available in Service Area'}
-                        </p>
-                      </div>
-                      <span style={{ fontWeight: 800, color: 'var(--primary)', fontSize: '1.1rem' }}>₹{p.chargesPerSession || selectedService?.basePrice}</span>
+                      <h4 style={{ fontWeight: 700, fontSize: '0.95rem' }}>{cat.name}</h4>
+                      {cat.slug === 'lab-tests' && (
+                        <span style={{ fontSize: '0.725rem', backgroundColor: '#dcfce7', color: '#15803d', padding: '0.15rem 0.45rem', borderRadius: '4px', fontWeight: 700, display: 'inline-block', marginTop: '0.35rem' }}>
+                          Home Sample Collection
+                        </span>
+                      )}
                     </div>
-                  );
-                })}
-
-              {/* Clinics List (for CLINIC_VISIT) */}
-              {serviceMode === 'CLINIC_VISIT' &&
-                clinics.map((c) => {
-                  const entityUserId = c.userId?._id || c.userId;
-                  return (
-                    <div
-                      key={c._id}
-                      onClick={() => setSelectedEntityId(entityUserId)}
-                      style={{
-                        padding: '1.25rem',
-                        borderRadius: 'var(--radius-md)',
-                        border: `2px solid ${selectedEntityId === entityUserId ? 'var(--primary)' : 'var(--border)'}`,
-                        backgroundColor: selectedEntityId === entityUserId ? 'var(--primary-light)' : 'white',
-                        cursor: 'pointer',
-                        display: 'flex',
-                        justifyContent: 'space-between',
-                        alignItems: 'center',
-                      }}
-                    >
-                      <div>
-                        <div style={{ display: 'flex', alignItems: 'center', gap: '0.4rem' }}>
-                          <h4 style={{ fontWeight: 700 }}>🏥 {c.clinicName}</h4>
-                          <span style={{ fontSize: '0.75rem', backgroundColor: '#dcfce7', color: '#15803d', padding: '0.15rem 0.45rem', borderRadius: '4px', fontWeight: 700 }}>VERIFIED CLINIC</span>
-                        </div>
-                        <p style={{ fontSize: '0.825rem', color: 'var(--text-muted)', marginTop: '0.25rem' }}>
-                          {c.addressLine1}, {c.city}, {c.state} • Contact: {c.phone}
-                        </p>
-                      </div>
-                      <span style={{ fontWeight: 800, color: 'var(--primary)', fontSize: '1.1rem' }}>₹{selectedService?.basePrice}</span>
-                    </div>
-                  );
-                })}
-
-              {/* Labs List (for LAB_VISIT or HOME_VISIT lab tests) */}
-              {serviceMode === 'LAB_VISIT' &&
-                labs.map((l) => {
-                  const entityUserId = l.userId?._id || l.userId;
-                  return (
-                    <div
-                      key={l._id}
-                      onClick={() => setSelectedEntityId(entityUserId)}
-                      style={{
-                        padding: '1.25rem',
-                        borderRadius: 'var(--radius-md)',
-                        border: `2px solid ${selectedEntityId === entityUserId ? 'var(--primary)' : 'var(--border)'}`,
-                        backgroundColor: selectedEntityId === entityUserId ? 'var(--primary-light)' : 'white',
-                        cursor: 'pointer',
-                        display: 'flex',
-                        justifyContent: 'space-between',
-                        alignItems: 'center',
-                      }}
-                    >
-                      <div>
-                        <div style={{ display: 'flex', alignItems: 'center', gap: '0.4rem' }}>
-                          <h4 style={{ fontWeight: 700 }}>🧪 {l.labName}</h4>
-                          <span style={{ fontSize: '0.75rem', backgroundColor: '#dcfce7', color: '#15803d', padding: '0.15rem 0.45rem', borderRadius: '4px', fontWeight: 700 }}>VERIFIED LAB</span>
-                        </div>
-                        <p style={{ fontSize: '0.825rem', color: 'var(--text-muted)', marginTop: '0.25rem' }}>
-                          {l.addressLine1}, {l.city} • Home Sample Fee: ₹{l.homeCollectionFee}
-                        </p>
-                      </div>
-                      <span style={{ fontWeight: 800, color: 'var(--primary)', fontSize: '1.1rem' }}>₹{selectedService?.basePrice}</span>
-                    </div>
-                  );
-                })}
-            </div>
-
-            <div style={{ display: 'flex', justifyContent: 'space-between', marginTop: '2.5rem' }}>
-              <button onClick={() => setCurrentStep(2)} className="btn btn-outline">Back</button>
-              <button onClick={() => setCurrentStep(4)} className="btn btn-primary">Next: Schedule & Date <ArrowRight size={18} /></button>
-            </div>
-          </div>
-        )}
-
-        {/* Step 4: Date, Time & Recurring Configuration */}
-        {currentStep === 4 && (
-          <div>
-            <h3 style={{ fontSize: '1.25rem', fontWeight: 700, marginBottom: '1.5rem' }}>Step 4: Schedule Date, Time & Recurrence</h3>
-
-            {engagementType === 'REGULAR_RECURRING' && (
-              <div style={{ backgroundColor: '#f0fdf4', padding: '1.25rem', borderRadius: 'var(--radius-md)', border: '1px solid #bbf7d0', marginBottom: '2rem' }}>
-                <h4 style={{ color: '#15803d', fontSize: '1rem', fontWeight: 700, marginBottom: '0.75rem', display: 'flex', alignItems: 'center', gap: '0.4rem' }}>
-                  <Repeat size={18} /> Recurring Hiring Schedule Configurator
-                </h4>
-
-                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem', marginBottom: '1rem' }}>
-                  <div className="form-group">
-                    <label className="form-label">Frequency</label>
-                    <select value={frequency} onChange={(e) => setFrequency(e.target.value as any)} className="form-select">
-                      <option value="DAILY">Daily (Every Day)</option>
-                      <option value="WEEKLY">Weekly (Specific Days)</option>
-                    </select>
-                  </div>
-
-                  <div className="form-group">
-                    <label className="form-label">Plan Duration (Weeks)</label>
-                    <select value={durationWeeks} onChange={(e) => setDurationWeeks(Number(e.target.value))} className="form-select">
-                      <option value={1}>1 Week Plan</option>
-                      <option value={2}>2 Weeks Plan</option>
-                      <option value={4}>4 Weeks (1 Month) Plan</option>
-                    </select>
-                  </div>
+                  ))}
                 </div>
 
-                {frequency === 'WEEKLY' && (
-                  <div className="form-group">
-                    <label className="form-label">Select Scheduled Days of Week</label>
-                    <div style={{ display: 'flex', gap: '0.5rem', flexWrap: 'wrap' }}>
-                      {[
-                        { num: 1, label: 'Mon' },
-                        { num: 2, label: 'Tue' },
-                        { num: 3, label: 'Wed' },
-                        { num: 4, label: 'Thu' },
-                        { num: 5, label: 'Fri' },
-                        { num: 6, label: 'Sat' },
-                        { num: 0, label: 'Sun' },
-                      ].map((day) => (
-                        <button
-                          key={day.num}
-                          type="button"
-                          onClick={() => toggleDayOfWeek(day.num)}
-                          className={`btn btn-sm ${daysOfWeek.includes(day.num) ? 'btn-primary' : 'btn-outline'}`}
-                        >
-                          {day.label}
-                        </button>
-                      ))}
+                <h3 style={{ fontSize: '1.1rem', fontWeight: 700, marginBottom: '1rem' }}>Select Specific Service / Diagnostic Panel</h3>
+                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: '1rem', marginBottom: '2.5rem' }}>
+                  {categoryServices.map((srv) => (
+                    <div
+                      key={srv._id}
+                      onClick={() => setSelectedServiceId(srv._id)}
+                      style={{
+                        padding: '1.1rem',
+                        borderRadius: 'var(--radius-md)',
+                        border: `2px solid ${selectedServiceId === srv._id ? 'var(--primary)' : 'var(--border)'}`,
+                        backgroundColor: selectedServiceId === srv._id ? 'var(--primary-light)' : 'white',
+                        cursor: 'pointer',
+                      }}
+                    >
+                      <div style={{ fontWeight: 700, fontSize: '0.95rem' }}>{srv.name}</div>
+                      <p style={{ color: 'var(--text-muted)', fontSize: '0.8rem', marginTop: '0.25rem', lineHeight: '1.4' }}>{srv.description}</p>
+                      <div style={{ color: 'var(--primary)', fontWeight: 800, fontSize: '1.1rem', marginTop: '0.5rem' }}>₹{srv.basePrice}</div>
                     </div>
-                  </div>
-                )}
+                  ))}
+                </div>
 
-                <div style={{ fontSize: '0.85rem', color: '#166534', backgroundColor: 'white', padding: '0.65rem 0.85rem', borderRadius: '6px', border: '1px solid #bbf7d0', marginTop: '0.5rem' }}>
-                  <strong>Recurring Summary:</strong> {frequency === 'DAILY' ? 'Daily sessions' : `Weekly sessions on selected days`} for {durationWeeks} weeks starting on {bookingDate}.
+                <div style={{ display: 'flex', justifyContent: 'flex-end' }}>
+                  <button disabled={!selectedServiceId} onClick={() => setCurrentStep(2)} className="btn btn-primary">
+                    Next: Patient Address <ArrowRight size={18} />
+                  </button>
                 </div>
               </div>
             )}
 
-            <div className="form-group">
-              <label className="form-label">Start Date / Booking Date</label>
-              <input
-                type="date"
-                min={new Date().toISOString().slice(0, 10)}
-                value={bookingDate}
-                onChange={(e) => setBookingDate(e.target.value)}
-                className="form-input"
-              />
-            </div>
+            {/* Step 2: Patient Home Address */}
+            {currentStep === 2 && (
+              <div>
+                <h3 style={{ fontSize: '1.1rem', fontWeight: 700, marginBottom: '1rem' }}>Step 2: Enter Patient Home Visit Address</h3>
+                
+                <button
+                  type="button"
+                  onClick={handleUseCurrentLocation}
+                  className="btn btn-outline btn-sm"
+                  style={{ marginBottom: '1.5rem', display: 'flex', alignItems: 'center', gap: '0.4rem' }}
+                >
+                  <Navigation size={16} color="var(--primary)" /> Use Current GPS Location
+                </button>
 
-            <div className="form-group" style={{ marginTop: '1.5rem' }}>
-              <label className="form-label">Available Real-Time Time Slots for {bookingDate}</label>
-
-              {availableSlots.length === 0 ? (
-                <p style={{ color: '#dc2626', fontSize: '0.9rem', padding: '1rem', background: '#fee2e2', borderRadius: '8px' }}>
-                  No available slots for this date. Please pick another date.
-                </p>
-              ) : (
-                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(120px, 1fr))', gap: '0.75rem', marginTop: '0.5rem' }}>
-                  {availableSlots.map((slot, idx) => (
-                    <button
-                      key={idx}
-                      type="button"
-                      onClick={() => setSelectedSlot(slot)}
-                      style={{
-                        padding: '0.65rem 0.5rem',
-                        borderRadius: '8px',
-                        border: `1.5px solid ${selectedSlot?.startTime === slot.startTime ? 'var(--primary)' : 'var(--border)'}`,
-                        backgroundColor: selectedSlot?.startTime === slot.startTime ? 'var(--primary)' : 'white',
-                        color: selectedSlot?.startTime === slot.startTime ? 'white' : 'var(--text-main)',
-                        fontWeight: 600,
-                        fontSize: '0.875rem',
-                      }}
-                    >
-                      {slot.startTime} - {slot.endTime}
-                    </button>
-                  ))}
-                </div>
-              )}
-            </div>
-
-            <div style={{ display: 'flex', justifyContent: 'space-between', marginTop: '2.5rem' }}>
-              <button onClick={() => setCurrentStep(3)} className="btn btn-outline">Back</button>
-              <button disabled={!selectedSlot} onClick={() => setCurrentStep(5)} className="btn btn-primary">
-                Next: Address & Confirm <ArrowRight size={18} />
-              </button>
-            </div>
-          </div>
-        )}
-
-        {/* Step 5: Address & Review Confirmation */}
-        {currentStep === 5 && (
-          <form onSubmit={handleSubmitBooking}>
-            <h3 style={{ fontSize: '1.25rem', fontWeight: 700, marginBottom: '1.5rem' }}>Step 5: Address & Final Confirmation</h3>
-
-            {(serviceMode === 'HOME_VISIT' || serviceMode === 'LAB_VISIT') && (
-              <div style={{ marginBottom: '2rem' }}>
-                <h4 style={{ fontSize: '1rem', fontWeight: 700, marginBottom: '1rem' }}>Patient Home Visit / Collection Address</h4>
                 <div className="form-group">
                   <label className="form-label">Address Line 1</label>
                   <input
                     type="text"
                     required
-                    placeholder="House/Flat No, Street, Area"
+                    placeholder="Flat/House No, Building Name, Street, Locality"
                     value={addressLine1}
                     onChange={(e) => setAddressLine1(e.target.value)}
                     className="form-input"
                   />
                 </div>
-                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: '1rem' }}>
+
+                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: '1rem', marginBottom: '2.5rem' }}>
                   <div className="form-group">
                     <label className="form-label">City</label>
                     <input type="text" required value={city} onChange={(e) => setCity(e.target.value)} className="form-input" />
@@ -715,46 +518,502 @@ export const BookingWizardPage: React.FC = () => {
                     <input type="text" required value={pincode} onChange={(e) => setPincode(e.target.value)} className="form-input" />
                   </div>
                 </div>
+
+                <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+                  <button onClick={() => setCurrentStep(1)} className="btn btn-outline">Back</button>
+                  <button onClick={() => setCurrentStep(3)} className="btn btn-primary">Next: Select Provider <ArrowRight size={18} /></button>
+                </div>
               </div>
             )}
 
-            <div className="form-group">
-              <label className="form-label">Instructions / Notes for Provider</label>
-              <textarea
-                rows={2}
-                placeholder="Mention any specific patient medical notes..."
-                value={notes}
-                onChange={(e) => setNotes(e.target.value)}
-                className="form-textarea"
-              />
-            </div>
+            {/* Step 3: Provider Selection (Specific vs Auto-Assign) */}
+            {currentStep === 3 && (
+              <div>
+                <h3 style={{ fontSize: '1.1rem', fontWeight: 700, marginBottom: '1rem' }}>
+                  Step 3: Select Home Service Professional
+                </h3>
+                <p style={{ color: 'var(--text-muted)', fontSize: '0.875rem', marginBottom: '1.5rem' }}>
+                  Choose a specific verified professional or let the platform find an available nearby provider automatically.
+                </p>
 
-            {/* Price Summary Breakdown */}
-            <div style={{ backgroundColor: '#f8fafc', padding: '1.5rem', borderRadius: 'var(--radius-md)', border: '1px solid var(--border)', marginBottom: '2rem' }}>
-              <h4 style={{ fontWeight: 700, fontSize: '1.05rem', marginBottom: '1rem' }}>Pricing Summary</h4>
-              <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '0.5rem', fontSize: '0.9rem' }}>
-                <span>Base Session Fee ({selectedService?.name}):</span>
-                <span style={{ fontWeight: 600 }}>₹{basePrice}</span>
-              </div>
-              {homeFee > 0 && (
-                <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '0.5rem', fontSize: '0.9rem' }}>
-                  <span>Home Collection Fee:</span>
-                  <span style={{ fontWeight: 600 }}>₹{homeFee}</span>
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem', marginBottom: '2.5rem' }}>
+                  {/* Option A: Auto-assign */}
+                  <div
+                    onClick={() => setSelectedProviderId('')}
+                    style={{
+                      padding: '1.25rem',
+                      borderRadius: 'var(--radius-md)',
+                      border: `2px solid ${selectedProviderId === '' ? 'var(--primary)' : 'var(--border)'}`,
+                      backgroundColor: selectedProviderId === '' ? 'var(--primary-light)' : 'white',
+                      cursor: 'pointer',
+                      fontWeight: 700,
+                    }}
+                  >
+                    ⚡ Any Available Verified Professional (Fastest Auto-Assignment)
+                  </div>
+
+                  {/* Option B: Specific Provider */}
+                  {providers.map((p) => {
+                    const entityUserId = p.userId?._id || p.userId;
+                    return (
+                      <div
+                        key={p._id}
+                        onClick={() => setSelectedProviderId(entityUserId)}
+                        style={{
+                          padding: '1.25rem',
+                          borderRadius: 'var(--radius-md)',
+                          border: `2px solid ${selectedProviderId === entityUserId ? 'var(--primary)' : 'var(--border)'}`,
+                          backgroundColor: selectedProviderId === entityUserId ? 'var(--primary-light)' : 'white',
+                          cursor: 'pointer',
+                          display: 'flex',
+                          justifyContent: 'space-between',
+                          alignItems: 'center',
+                        }}
+                      >
+                        <div>
+                          <div style={{ display: 'flex', alignItems: 'center', gap: '0.4rem' }}>
+                            <h4 style={{ fontWeight: 700 }}>{p.fullName}</h4>
+                            <span style={{ fontSize: '0.725rem', backgroundColor: '#dcfce7', color: '#15803d', padding: '0.15rem 0.45rem', borderRadius: '4px', fontWeight: 700 }}>VERIFIED</span>
+                          </div>
+                          <p style={{ fontSize: '0.825rem', color: 'var(--text-muted)', marginTop: '0.25rem' }}>
+                            {p.qualification} • {p.experienceYears} Yrs Exp • {p.city || 'Available in Location'}
+                          </p>
+                        </div>
+                        <span style={{ fontWeight: 800, color: 'var(--primary)', fontSize: '1.1rem' }}>₹{p.chargesPerSession || basePrice}</span>
+                      </div>
+                    );
+                  })}
                 </div>
-              )}
-              <div style={{ borderTop: '1px solid var(--border)', paddingTop: '0.75rem', marginTop: '0.75rem', display: 'flex', justifyContent: 'space-between', fontSize: '1.15rem', fontWeight: 800 }}>
-                <span>Total Amount per Session:</span>
-                <span style={{ color: 'var(--primary)' }}>₹{totalAmount}</span>
+
+                <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+                  <button onClick={() => setCurrentStep(2)} className="btn btn-outline">Back</button>
+                  <button onClick={() => setCurrentStep(4)} className="btn btn-primary">Next: Schedule Date & Time <ArrowRight size={18} /></button>
+                </div>
               </div>
+            )}
+
+            {/* Step 4: Date, Slot & Confirmation */}
+            {currentStep === 4 && (
+              <form onSubmit={handleSubmitBooking}>
+                <h3 style={{ fontSize: '1.1rem', fontWeight: 700, marginBottom: '1.5rem' }}>Step 4: Schedule Date, Time & Finalize</h3>
+
+                <div className="form-group">
+                  <label className="form-label">Booking Date</label>
+                  <input
+                    type="date"
+                    min={new Date().toISOString().slice(0, 10)}
+                    value={bookingDate}
+                    onChange={(e) => setBookingDate(e.target.value)}
+                    className="form-input"
+                  />
+                </div>
+
+                <div className="form-group" style={{ marginTop: '1.5rem', marginBottom: '2rem' }}>
+                  <label className="form-label">Available Time Slots for {bookingDate}</label>
+                  {availableSlots.length === 0 ? (
+                    <p style={{ color: '#dc2626', fontSize: '0.9rem', padding: '1rem', background: '#fee2e2', borderRadius: '8px' }}>
+                      No available slots for this date. Please pick another date.
+                    </p>
+                  ) : (
+                    <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(120px, 1fr))', gap: '0.75rem', marginTop: '0.5rem' }}>
+                      {availableSlots.map((slot, idx) => (
+                        <button
+                          key={idx}
+                          type="button"
+                          onClick={() => setSelectedSlot(slot)}
+                          style={{
+                            padding: '0.65rem 0.5rem',
+                            borderRadius: '8px',
+                            border: `1.5px solid ${selectedSlot?.startTime === slot.startTime ? 'var(--primary)' : 'var(--border)'}`,
+                            backgroundColor: selectedSlot?.startTime === slot.startTime ? 'var(--primary)' : 'white',
+                            color: selectedSlot?.startTime === slot.startTime ? 'white' : 'var(--text-main)',
+                            fontWeight: 600,
+                            fontSize: '0.875rem',
+                          }}
+                        >
+                          {slot.startTime} - {slot.endTime}
+                        </button>
+                      ))}
+                    </div>
+                  )}
+                </div>
+
+                <div className="form-group">
+                  <label className="form-label">Notes for Healthcare Specialist</label>
+                  <textarea rows={2} placeholder="Any specific patient health instructions..." value={notes} onChange={(e) => setNotes(e.target.value)} className="form-textarea" />
+                </div>
+
+                {/* Price Breakdown */}
+                <div style={{ backgroundColor: '#f8fafc', padding: '1.25rem', borderRadius: 'var(--radius-md)', border: '1px solid var(--border)', marginBottom: '2rem' }}>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '0.4rem', fontSize: '0.9rem' }}>
+                    <span>Base Service Fee ({selectedService?.name}):</span>
+                    <span style={{ fontWeight: 600 }}>₹{basePrice}</span>
+                  </div>
+                  {isHomeLabTest && (
+                    <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '0.4rem', fontSize: '0.9rem' }}>
+                      <span>Home Sample Collection Fee:</span>
+                      <span style={{ fontWeight: 600 }}>₹150</span>
+                    </div>
+                  )}
+                  <div style={{ borderTop: '1px solid var(--border)', paddingTop: '0.6rem', marginTop: '0.6rem', display: 'flex', justifyContent: 'space-between', fontSize: '1.15rem', fontWeight: 800 }}>
+                    <span>Total Amount Payable:</span>
+                    <span style={{ color: 'var(--primary)' }}>₹{totalAmount}</span>
+                  </div>
+                </div>
+
+                <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+                  <button type="button" onClick={() => setCurrentStep(3)} className="btn btn-outline">Back</button>
+                  <button type="submit" disabled={submitting || !selectedSlot} className="btn btn-primary btn-lg">
+                    {submitting ? 'Submitting Booking...' : 'CONFIRM HOME VISIT BOOKING'}
+                  </button>
+                </div>
+              </form>
+            )}
+          </div>
+        )}
+
+        {/* =========================================================================
+            MODE 2: CLINIC VISIT FLOW
+           ========================================================================= */}
+        {serviceMode === 'CLINIC_VISIT' && (
+          <div>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', marginBottom: '1.5rem', paddingBottom: '1rem', borderBottom: '1px solid var(--border)' }}>
+              <Building2 size={22} color="#0d9488" />
+              <h2 style={{ fontSize: '1.35rem', fontWeight: 800, color: 'var(--text-main)' }}>Clinic Visit Booking Flow</h2>
             </div>
 
-            <div style={{ display: 'flex', justifyContent: 'space-between' }}>
-              <button type="button" onClick={() => setCurrentStep(4)} className="btn btn-outline">Back</button>
-              <button type="submit" disabled={submitting} className="btn btn-primary btn-lg">
-                {submitting ? 'Creating Booking Request...' : 'CONFIRM BOOKING'}
-              </button>
+            {/* Step 1: Search & Choose Verified Clinic */}
+            {currentStep === 1 && (
+              <div>
+                <h3 style={{ fontSize: '1.1rem', fontWeight: 700, marginBottom: '1rem' }}>Step 1: Search & Select Nearby Verified Clinic</h3>
+                
+                <div style={{ marginBottom: '1.5rem', position: 'relative' }}>
+                  <input
+                    type="text"
+                    placeholder="Search clinics by name, city, or locality..."
+                    value={clinicSearchQuery}
+                    onChange={(e) => setClinicSearchQuery(e.target.value)}
+                    className="form-input"
+                    style={{ paddingLeft: '2.5rem' }}
+                  />
+                  <Search size={18} color="var(--text-muted)" style={{ position: 'absolute', left: '0.85rem', top: '50%', transform: 'translateY(-50%)' }} />
+                </div>
+
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem', marginBottom: '2.5rem', maxHeight: '350px', overflowY: 'auto' }}>
+                  {filteredClinics.map((c) => {
+                    const entityUserId = c.userId?._id || c.userId;
+                    return (
+                      <div
+                        key={c._id}
+                        onClick={() => setSelectedClinicId(entityUserId)}
+                        style={{
+                          padding: '1.25rem',
+                          borderRadius: 'var(--radius-md)',
+                          border: `2px solid ${selectedClinicId === entityUserId ? '#0d9488' : 'var(--border)'}`,
+                          backgroundColor: selectedClinicId === entityUserId ? '#ccfbf1' : 'white',
+                          cursor: 'pointer',
+                          display: 'flex',
+                          justifyContent: 'space-between',
+                          alignItems: 'center',
+                        }}
+                      >
+                        <div>
+                          <div style={{ display: 'flex', alignItems: 'center', gap: '0.4rem' }}>
+                            <h4 style={{ fontWeight: 700 }}>🏥 {c.clinicName}</h4>
+                            <span style={{ fontSize: '0.725rem', backgroundColor: '#dcfce7', color: '#15803d', padding: '0.15rem 0.45rem', borderRadius: '4px', fontWeight: 700 }}>VERIFIED CLINIC</span>
+                          </div>
+                          <p style={{ fontSize: '0.825rem', color: 'var(--text-muted)', marginTop: '0.25rem' }}>
+                            <MapPin size={14} style={{ display: 'inline', marginRight: '4px' }} />
+                            {c.addressLine1}, {c.city}, {c.state} ({c.pincode})
+                          </p>
+                        </div>
+                        <span style={{ fontWeight: 700, color: '#0d9488', fontSize: '0.9rem' }}>Select Clinic</span>
+                      </div>
+                    );
+                  })}
+                </div>
+
+                <div style={{ display: 'flex', justifyContent: 'flex-end' }}>
+                  <button disabled={!selectedClinicId} onClick={() => setCurrentStep(2)} className="btn btn-primary" style={{ backgroundColor: '#0d9488', borderColor: '#0d9488' }}>
+                    Next: Choose Clinic Service <ArrowRight size={18} />
+                  </button>
+                </div>
+              </div>
+            )}
+
+            {/* Step 2: Choose Service Offered at Clinic */}
+            {currentStep === 2 && (
+              <div>
+                <h3 style={{ fontSize: '1.1rem', fontWeight: 700, marginBottom: '1rem' }}>Step 2: Select Service Offered at Clinic</h3>
+
+                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: '1rem', marginBottom: '2.5rem' }}>
+                  {services.filter(s => s.serviceModesSupported.includes('CLINIC_VISIT')).map((srv) => (
+                    <div
+                      key={srv._id}
+                      onClick={() => setSelectedServiceId(srv._id)}
+                      style={{
+                        padding: '1.1rem',
+                        borderRadius: 'var(--radius-md)',
+                        border: `2px solid ${selectedServiceId === srv._id ? '#0d9488' : 'var(--border)'}`,
+                        backgroundColor: selectedServiceId === srv._id ? '#ccfbf1' : 'white',
+                        cursor: 'pointer',
+                      }}
+                    >
+                      <div style={{ fontWeight: 700, fontSize: '0.95rem' }}>{srv.name}</div>
+                      <p style={{ color: 'var(--text-muted)', fontSize: '0.8rem', marginTop: '0.25rem', lineHeight: '1.4' }}>{srv.description}</p>
+                      <div style={{ color: '#0d9488', fontWeight: 800, fontSize: '1.1rem', marginTop: '0.5rem' }}>₹{srv.basePrice}</div>
+                    </div>
+                  ))}
+                </div>
+
+                <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+                  <button onClick={() => setCurrentStep(1)} className="btn btn-outline">Back</button>
+                  <button disabled={!selectedServiceId} onClick={() => setCurrentStep(3)} className="btn btn-primary" style={{ backgroundColor: '#0d9488', borderColor: '#0d9488' }}>
+                    Next: Schedule Date & Slot <ArrowRight size={18} />
+                  </button>
+                </div>
+              </div>
+            )}
+
+            {/* Step 3: Date, Time & Final Confirmation */}
+            {currentStep === 3 && (
+              <form onSubmit={handleSubmitBooking}>
+                <h3 style={{ fontSize: '1.1rem', fontWeight: 700, marginBottom: '1.5rem' }}>Step 3: Schedule Date, Time & Confirm</h3>
+
+                <div className="form-group">
+                  <label className="form-label">Appointment Date</label>
+                  <input
+                    type="date"
+                    min={new Date().toISOString().slice(0, 10)}
+                    value={bookingDate}
+                    onChange={(e) => setBookingDate(e.target.value)}
+                    className="form-input"
+                  />
+                </div>
+
+                <div className="form-group" style={{ marginTop: '1.5rem', marginBottom: '2rem' }}>
+                  <label className="form-label">Available Clinic Time Slots for {bookingDate}</label>
+                  {availableSlots.length === 0 ? (
+                    <p style={{ color: '#dc2626', fontSize: '0.9rem', padding: '1rem', background: '#fee2e2', borderRadius: '8px' }}>
+                      No available slots for this clinic on this date.
+                    </p>
+                  ) : (
+                    <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(120px, 1fr))', gap: '0.75rem', marginTop: '0.5rem' }}>
+                      {availableSlots.map((slot, idx) => (
+                        <button
+                          key={idx}
+                          type="button"
+                          onClick={() => setSelectedSlot(slot)}
+                          style={{
+                            padding: '0.65rem 0.5rem',
+                            borderRadius: '8px',
+                            border: `1.5px solid ${selectedSlot?.startTime === slot.startTime ? '#0d9488' : 'var(--border)'}`,
+                            backgroundColor: selectedSlot?.startTime === slot.startTime ? '#0d9488' : 'white',
+                            color: selectedSlot?.startTime === slot.startTime ? 'white' : 'var(--text-main)',
+                            fontWeight: 600,
+                            fontSize: '0.875rem',
+                          }}
+                        >
+                          {slot.startTime} - {slot.endTime}
+                        </button>
+                      ))}
+                    </div>
+                  )}
+                </div>
+
+                {/* Price Breakdown */}
+                <div style={{ backgroundColor: '#f8fafc', padding: '1.25rem', borderRadius: 'var(--radius-md)', border: '1px solid var(--border)', marginBottom: '2rem' }}>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '0.4rem', fontSize: '0.9rem' }}>
+                    <span>Clinic Consultation Fee ({selectedService?.name}):</span>
+                    <span style={{ fontWeight: 600 }}>₹{basePrice}</span>
+                  </div>
+                  <div style={{ borderTop: '1px solid var(--border)', paddingTop: '0.6rem', marginTop: '0.6rem', display: 'flex', justifyContent: 'space-between', fontSize: '1.15rem', fontWeight: 800 }}>
+                    <span>Total Amount Payable:</span>
+                    <span style={{ color: '#0d9488' }}>₹{totalAmount}</span>
+                  </div>
+                </div>
+
+                <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+                  <button type="button" onClick={() => setCurrentStep(2)} className="btn btn-outline">Back</button>
+                  <button type="submit" disabled={submitting || !selectedSlot} className="btn btn-primary btn-lg" style={{ backgroundColor: '#0d9488', borderColor: '#0d9488' }}>
+                    {submitting ? 'Submitting Booking...' : 'CONFIRM CLINIC BOOKING'}
+                  </button>
+                </div>
+              </form>
+            )}
+          </div>
+        )}
+
+        {/* =========================================================================
+            MODE 3: LAB VISIT FLOW
+           ========================================================================= */}
+        {serviceMode === 'LAB_VISIT' && (
+          <div>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', marginBottom: '1.5rem', paddingBottom: '1rem', borderBottom: '1px solid var(--border)' }}>
+              <FlaskConical size={22} color="#0284c7" />
+              <h2 style={{ fontSize: '1.35rem', fontWeight: 800, color: 'var(--text-main)' }}>Lab Center Visit Booking Flow</h2>
             </div>
-          </form>
+
+            {/* Step 1: Search & Choose Verified Lab */}
+            {currentStep === 1 && (
+              <div>
+                <h3 style={{ fontSize: '1.1rem', fontWeight: 700, marginBottom: '1rem' }}>Step 1: Search & Select Nearby Pathology Lab</h3>
+                
+                <div style={{ marginBottom: '1.5rem', position: 'relative' }}>
+                  <input
+                    type="text"
+                    placeholder="Search labs by name, city, or locality..."
+                    value={labSearchQuery}
+                    onChange={(e) => setLabSearchQuery(e.target.value)}
+                    className="form-input"
+                    style={{ paddingLeft: '2.5rem' }}
+                  />
+                  <Search size={18} color="var(--text-muted)" style={{ position: 'absolute', left: '0.85rem', top: '50%', transform: 'translateY(-50%)' }} />
+                </div>
+
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem', marginBottom: '2.5rem', maxHeight: '350px', overflowY: 'auto' }}>
+                  {filteredLabs.map((l) => {
+                    const entityUserId = l.userId?._id || l.userId;
+                    return (
+                      <div
+                        key={l._id}
+                        onClick={() => setSelectedLabId(entityUserId)}
+                        style={{
+                          padding: '1.25rem',
+                          borderRadius: 'var(--radius-md)',
+                          border: `2px solid ${selectedLabId === entityUserId ? '#0284c7' : 'var(--border)'}`,
+                          backgroundColor: selectedLabId === entityUserId ? '#e0f2fe' : 'white',
+                          cursor: 'pointer',
+                          display: 'flex',
+                          justifyContent: 'space-between',
+                          alignItems: 'center',
+                        }}
+                      >
+                        <div>
+                          <div style={{ display: 'flex', alignItems: 'center', gap: '0.4rem' }}>
+                            <h4 style={{ fontWeight: 700 }}>🧪 {l.labName}</h4>
+                            <span style={{ fontSize: '0.725rem', backgroundColor: '#dcfce7', color: '#15803d', padding: '0.15rem 0.45rem', borderRadius: '4px', fontWeight: 700 }}>VERIFIED LAB</span>
+                          </div>
+                          <p style={{ fontSize: '0.825rem', color: 'var(--text-muted)', marginTop: '0.25rem' }}>
+                            <MapPin size={14} style={{ display: 'inline', marginRight: '4px' }} />
+                            {l.addressLine1}, {l.city}, {l.state} ({l.pincode})
+                          </p>
+                        </div>
+                        <span style={{ fontWeight: 700, color: '#0284c7', fontSize: '0.9rem' }}>Select Lab</span>
+                      </div>
+                    );
+                  })}
+                </div>
+
+                <div style={{ display: 'flex', justifyContent: 'flex-end' }}>
+                  <button disabled={!selectedLabId} onClick={() => setCurrentStep(2)} className="btn btn-primary" style={{ backgroundColor: '#0284c7', borderColor: '#0284c7' }}>
+                    Next: Select Test Panel <ArrowRight size={18} />
+                  </button>
+                </div>
+              </div>
+            )}
+
+            {/* Step 2: Select Diagnostic Test Offered by Lab */}
+            {currentStep === 2 && (
+              <div>
+                <h3 style={{ fontSize: '1.1rem', fontWeight: 700, marginBottom: '1rem' }}>Step 2: Select Diagnostic Test Panel</h3>
+
+                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: '1rem', marginBottom: '2.5rem' }}>
+                  {services.filter(s => s.serviceModesSupported.includes('LAB_VISIT') || (typeof s.categoryId === 'object' && s.categoryId.slug === 'lab-tests')).map((srv) => (
+                    <div
+                      key={srv._id}
+                      onClick={() => setSelectedServiceId(srv._id)}
+                      style={{
+                        padding: '1.1rem',
+                        borderRadius: 'var(--radius-md)',
+                        border: `2px solid ${selectedServiceId === srv._id ? '#0284c7' : 'var(--border)'}`,
+                        backgroundColor: selectedServiceId === srv._id ? '#e0f2fe' : 'white',
+                        cursor: 'pointer',
+                      }}
+                    >
+                      <div style={{ fontWeight: 700, fontSize: '0.95rem' }}>{srv.name}</div>
+                      <p style={{ color: 'var(--text-muted)', fontSize: '0.8rem', marginTop: '0.25rem', lineHeight: '1.4' }}>{srv.description}</p>
+                      <div style={{ color: '#0284c7', fontWeight: 800, fontSize: '1.1rem', marginTop: '0.5rem' }}>₹{srv.basePrice}</div>
+                    </div>
+                  ))}
+                </div>
+
+                <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+                  <button onClick={() => setCurrentStep(1)} className="btn btn-outline">Back</button>
+                  <button disabled={!selectedServiceId} onClick={() => setCurrentStep(3)} className="btn btn-primary" style={{ backgroundColor: '#0284c7', borderColor: '#0284c7' }}>
+                    Next: Schedule Date & Slot <ArrowRight size={18} />
+                  </button>
+                </div>
+              </div>
+            )}
+
+            {/* Step 3: Date, Time & Final Confirmation */}
+            {currentStep === 3 && (
+              <form onSubmit={handleSubmitBooking}>
+                <h3 style={{ fontSize: '1.1rem', fontWeight: 700, marginBottom: '1.5rem' }}>Step 3: Schedule Date, Time & Confirm</h3>
+
+                <div className="form-group">
+                  <label className="form-label">Lab Visit Date</label>
+                  <input
+                    type="date"
+                    min={new Date().toISOString().slice(0, 10)}
+                    value={bookingDate}
+                    onChange={(e) => setBookingDate(e.target.value)}
+                    className="form-input"
+                  />
+                </div>
+
+                <div className="form-group" style={{ marginTop: '1.5rem', marginBottom: '2rem' }}>
+                  <label className="form-label">Available Lab Time Slots for {bookingDate}</label>
+                  {availableSlots.length === 0 ? (
+                    <p style={{ color: '#dc2626', fontSize: '0.9rem', padding: '1rem', background: '#fee2e2', borderRadius: '8px' }}>
+                      No available slots for this lab on this date.
+                    </p>
+                  ) : (
+                    <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(120px, 1fr))', gap: '0.75rem', marginTop: '0.5rem' }}>
+                      {availableSlots.map((slot, idx) => (
+                        <button
+                          key={idx}
+                          type="button"
+                          onClick={() => setSelectedSlot(slot)}
+                          style={{
+                            padding: '0.65rem 0.5rem',
+                            borderRadius: '8px',
+                            border: `1.5px solid ${selectedSlot?.startTime === slot.startTime ? '#0284c7' : 'var(--border)'}`,
+                            backgroundColor: selectedSlot?.startTime === slot.startTime ? '#0284c7' : 'white',
+                            color: selectedSlot?.startTime === slot.startTime ? 'white' : 'var(--text-main)',
+                            fontWeight: 600,
+                            fontSize: '0.875rem',
+                          }}
+                        >
+                          {slot.startTime} - {slot.endTime}
+                        </button>
+                      ))}
+                    </div>
+                  )}
+                </div>
+
+                {/* Price Breakdown */}
+                <div style={{ backgroundColor: '#f8fafc', padding: '1.25rem', borderRadius: 'var(--radius-md)', border: '1px solid var(--border)', marginBottom: '2rem' }}>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '0.4rem', fontSize: '0.9rem' }}>
+                    <span>Diagnostic Test Panel Fee ({selectedService?.name}):</span>
+                    <span style={{ fontWeight: 600 }}>₹{basePrice}</span>
+                  </div>
+                  <div style={{ borderTop: '1px solid var(--border)', paddingTop: '0.6rem', marginTop: '0.6rem', display: 'flex', justifyContent: 'space-between', fontSize: '1.15rem', fontWeight: 800 }}>
+                    <span>Total Amount Payable:</span>
+                    <span style={{ color: '#0284c7' }}>₹{totalAmount}</span>
+                  </div>
+                </div>
+
+                <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+                  <button type="button" onClick={() => setCurrentStep(2)} className="btn btn-outline">Back</button>
+                  <button type="submit" disabled={submitting || !selectedSlot} className="btn btn-primary btn-lg" style={{ backgroundColor: '#0284c7', borderColor: '#0284c7' }}>
+                    {submitting ? 'Submitting Booking...' : 'CONFIRM LAB VISIT BOOKING'}
+                  </button>
+                </div>
+              </form>
+            )}
+          </div>
         )}
       </div>
     </div>

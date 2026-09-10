@@ -71,64 +71,80 @@ export const HomePage: React.FC = () => {
               Physiotherapy, Occupational Therapy, Elder Care, and Lab Diagnostics. Book one-time visits or hire personal regular caregivers with verified healthcare professionals.
             </p>
 
-            {/* Mode Switcher Tabs */}
-            <div style={{ background: 'rgba(255,255,255,0.08)', backdropFilter: 'blur(10px)', padding: '0.5rem', borderRadius: '14px', display: 'inline-flex', gap: '0.5rem', marginBottom: '2rem', border: '1px solid rgba(255,255,255,0.1)' }}>
-              <button
-                onClick={() => setActiveMode('HOME_VISIT')}
-                style={{
-                  padding: '0.65rem 1.2rem',
-                  borderRadius: '10px',
-                  fontWeight: 600,
-                  fontSize: '0.9rem',
-                  display: 'flex',
-                  alignItems: 'center',
-                  gap: '0.5rem',
-                  color: activeMode === 'HOME_VISIT' ? '#0f172a' : '#94a3b8',
-                  backgroundColor: activeMode === 'HOME_VISIT' ? '#38bdf8' : 'transparent',
-                  transition: 'all 0.2s ease',
-                }}
-              >
-                <Home size={18} /> Home Service
-              </button>
-              <button
-                onClick={() => setActiveMode('CLINIC_VISIT')}
-                style={{
-                  padding: '0.65rem 1.2rem',
-                  borderRadius: '10px',
-                  fontWeight: 600,
-                  fontSize: '0.9rem',
-                  display: 'flex',
-                  alignItems: 'center',
-                  gap: '0.5rem',
-                  color: activeMode === 'CLINIC_VISIT' ? '#0f172a' : '#94a3b8',
-                  backgroundColor: activeMode === 'CLINIC_VISIT' ? '#38bdf8' : 'transparent',
-                  transition: 'all 0.2s ease',
-                }}
-              >
-                <Building2 size={18} /> Clinic Visit
-              </button>
-              <button
-                onClick={() => setActiveMode('LAB_VISIT')}
-                style={{
-                  padding: '0.65rem 1.2rem',
-                  borderRadius: '10px',
-                  fontWeight: 600,
-                  fontSize: '0.9rem',
-                  display: 'flex',
-                  alignItems: 'center',
-                  gap: '0.5rem',
-                  color: activeMode === 'LAB_VISIT' ? '#0f172a' : '#94a3b8',
-                  backgroundColor: activeMode === 'LAB_VISIT' ? '#38bdf8' : 'transparent',
-                  transition: 'all 0.2s ease',
-                }}
-              >
-                <FlaskConical size={18} /> Lab Tests
-              </button>
+            {/* Prominent BOOK Entry Modes */}
+            <div style={{ backgroundColor: 'rgba(255,255,255,0.08)', backdropFilter: 'blur(12px)', padding: '1rem', borderRadius: '20px', border: '1px solid rgba(255,255,255,0.15)', marginBottom: '2rem' }}>
+              <div style={{ color: '#38bdf8', fontSize: '0.85rem', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: '0.75rem' }}>
+                Select Booking Visit Mode:
+              </div>
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(140px, 1fr))', gap: '0.75rem' }}>
+                <button
+                  onClick={() => navigate('/book?mode=HOME_VISIT')}
+                  style={{
+                    padding: '0.85rem 1rem',
+                    borderRadius: '12px',
+                    fontWeight: 700,
+                    fontSize: '0.9rem',
+                    display: 'flex',
+                    flexDirection: 'column',
+                    alignItems: 'center',
+                    gap: '0.4rem',
+                    color: '#0f172a',
+                    backgroundColor: '#38bdf8',
+                    border: 'none',
+                    cursor: 'pointer',
+                    boxShadow: '0 4px 12px rgba(56, 189, 248, 0.3)',
+                  }}
+                >
+                  <Home size={22} /> Home Visit
+                </button>
+
+                <button
+                  onClick={() => navigate('/book?mode=CLINIC_VISIT')}
+                  style={{
+                    padding: '0.85rem 1rem',
+                    borderRadius: '12px',
+                    fontWeight: 700,
+                    fontSize: '0.9rem',
+                    display: 'flex',
+                    flexDirection: 'column',
+                    alignItems: 'center',
+                    gap: '0.4rem',
+                    color: '#ffffff',
+                    backgroundColor: '#0d9488',
+                    border: 'none',
+                    cursor: 'pointer',
+                    boxShadow: '0 4px 12px rgba(13, 148, 136, 0.3)',
+                  }}
+                >
+                  <Building2 size={22} /> Clinic Visit
+                </button>
+
+                <button
+                  onClick={() => navigate('/book?mode=LAB_VISIT')}
+                  style={{
+                    padding: '0.85rem 1rem',
+                    borderRadius: '12px',
+                    fontWeight: 700,
+                    fontSize: '0.9rem',
+                    display: 'flex',
+                    flexDirection: 'column',
+                    alignItems: 'center',
+                    gap: '0.4rem',
+                    color: '#ffffff',
+                    backgroundColor: '#0284c7',
+                    border: 'none',
+                    cursor: 'pointer',
+                    boxShadow: '0 4px 12px rgba(2, 132, 199, 0.3)',
+                  }}
+                >
+                  <FlaskConical size={22} /> Lab Visit
+                </button>
+              </div>
             </div>
 
             <div style={{ display: 'flex', gap: '1rem', flexWrap: 'wrap' }}>
-              <button onClick={() => navigate('/services/physiotherapy')} className="btn btn-primary btn-lg">
-                Explore Services & Book <ArrowRight size={18} />
+              <button onClick={() => navigate('/book?mode=HOME_VISIT')} className="btn btn-primary btn-lg">
+                BOOK APPOINTMENT NOW <ArrowRight size={18} />
               </button>
             </div>
           </div>

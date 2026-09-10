@@ -110,7 +110,10 @@ export const LabsPage: React.FC = () => {
                   View Lab Profile
                 </Link>
                 <button
-                  onClick={() => navigate('/services/lab-tests')}
+                  onClick={() => {
+                    const lUserId = l.userId?._id || l.userId;
+                    navigate(`/book?mode=LAB_VISIT&labId=${lUserId}`);
+                  }}
                   className="btn btn-primary btn-sm"
                   style={{ flex: 1, justifyContent: 'center' }}
                 >
@@ -203,7 +206,14 @@ export const LabProfilePage: React.FC = () => {
               ))}
             </div>
 
-            <button onClick={() => navigate('/services/lab-tests')} className="btn btn-primary btn-lg" style={{ width: '100%', marginTop: '1.5rem', justifyContent: 'center' }}>
+            <button
+              onClick={() => {
+                const lUserId = lab.userId?._id || lab.userId;
+                navigate(`/book?mode=LAB_VISIT&labId=${lUserId}`);
+              }}
+              className="btn btn-primary btn-lg"
+              style={{ width: '100%', marginTop: '1.5rem', justifyContent: 'center' }}
+            >
               Book Lab Test Now <ArrowRight size={18} />
             </button>
           </div>

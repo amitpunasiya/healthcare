@@ -3,7 +3,7 @@ export type VerificationStatus = 'NOT_REQUIRED' | 'PENDING_VERIFICATION' | 'VERI
 export type BookingSource = 'ONLINE' | 'MANUAL';
 export type ServiceMode = 'HOME_VISIT' | 'CLINIC_VISIT' | 'LAB_VISIT';
 export type EngagementType = 'ONE_TIME' | 'REGULAR_RECURRING';
-export type BookingStatus = 'PENDING' | 'ACCEPTED' | 'REJECTED' | 'IN_PROGRESS' | 'COMPLETED' | 'CANCELLED' | 'NO_SHOW';
+export type BookingStatus = 'REQUESTED' | 'SEARCHING' | 'PENDING' | 'ACCEPTED' | 'REJECTED' | 'IN_PROGRESS' | 'COMPLETED' | 'PAYMENT_PENDING' | 'PAID' | 'NO_PROVIDER_FOUND' | 'CANCELLED' | 'NO_SHOW';
 export type PlanStatus = 'ACTIVE' | 'PAUSED' | 'COMPLETED' | 'CANCELLED';
 
 export interface Address {
@@ -11,9 +11,17 @@ export interface Address {
   label?: string;
   addressLine1: string;
   addressLine2?: string;
+  houseNumber?: string;
+  flatNumber?: string;
+  buildingName?: string;
+  street?: string;
+  area?: string;
+  district?: string;
   city: string;
   state: string;
   pincode: string;
+  country?: string;
+  countryCode?: string;
   landmark?: string;
   latitude?: number;
   longitude?: number;
@@ -50,6 +58,9 @@ export interface Service {
   name: string;
   description: string;
   basePrice: number;
+  originalPrice?: number;
+  discountPercent?: number;
+  testCategory?: string;
   durationMinutes: number;
   serviceModesSupported: ServiceMode[];
   engagementTypesSupported: EngagementType[];
@@ -73,6 +84,8 @@ export interface ProviderProfile {
   clinicVisitAvailable: boolean;
   serviceLocations: string[];
   city?: string;
+  latitude?: number;
+  longitude?: number;
   workingHours: { day: string; available: boolean; startTime: string; endTime: string }[];
 }
 
@@ -89,6 +102,8 @@ export interface ClinicProfile {
   pincode: string;
   googleMapsUrl?: string;
   description?: string;
+  latitude?: number;
+  longitude?: number;
   servicesOffered: Service[];
   openingHours: { day: string; available: boolean; startTime: string; endTime: string }[];
 }
@@ -105,6 +120,8 @@ export interface LabProfile {
   state: string;
   pincode: string;
   description?: string;
+  latitude?: number;
+  longitude?: number;
   testsOffered: Service[];
   homeSampleCollectionAvailable: boolean;
   labVisitAvailable: boolean;

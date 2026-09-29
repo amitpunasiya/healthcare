@@ -6,10 +6,12 @@ import User from '../models/User';
 import { AuthRequest } from '../middlewares/auth';
 import { BookingStatus, PaymentStatus, PaymentMethod, PaymentSource, UserRole } from '../constants/enums';
 import { createNotification } from '../services/notificationService';
+import { createEarningLedgerRecord } from './settlementController';
+import { env } from '../config/env';
 
-const RAZORPAY_KEY_ID = process.env.RAZORPAY_KEY_ID || 'rzp_test_key_id';
-const RAZORPAY_KEY_SECRET = process.env.RAZORPAY_KEY_SECRET || 'rzp_test_secret_key';
-const RAZORPAY_WEBHOOK_SECRET = process.env.RAZORPAY_WEBHOOK_SECRET || 'rzp_test_webhook_secret';
+const RAZORPAY_KEY_ID = env.RAZORPAY_KEY_ID;
+const RAZORPAY_KEY_SECRET = env.RAZORPAY_KEY_SECRET;
+const RAZORPAY_WEBHOOK_SECRET = env.RAZORPAY_WEBHOOK_SECRET;
 
 // 1. Create Razorpay Order & Payment Record
 export const createRazorpayOrder = async (req: AuthRequest, res: Response, next: NextFunction) => {
@@ -24,6 +26,16 @@ export const createRazorpayOrder = async (req: AuthRequest, res: Response, next:
 
     if (booking.customerId.toString() !== customerId && req.user!.role !== UserRole.ADMIN) {
       return res.status(403).json({ success: false, message: 'Access denied.' });
+    }
+
+    // Post-Service Payment Enforcement: Home visit payments can only be processed AFTER service completion
+    if (booking.serviceMode === 'HOME_VISIT') {
+      if (!booking.serviceCompletedAt || (booking.status !== BookingStatus.COMPLETED && booking.status !== BookingStatus.PAYMENT_PENDING)) {
+        return res.status(400).json({
+          success: false,
+          message: 'Payment can only be collected AFTER the healthcare service has been completed by the specialist.',
+        });
+      }
     }
 
     const totalAmount = booking.pricing.totalAmount;
@@ -48,7 +60,7 @@ export const createRazorpayOrder = async (req: AuthRequest, res: Response, next:
         pricingBreakdown: {
           baseFee: booking.pricing.baseFee,
           homeCollectionFee: booking.pricing.homeCollectionFee,
-          platformFee: Math.round(totalAmount * 0.1),
+          platformFee: Math.round(totalAmount * 0.2),
           taxAmount: 0,
           discountFee: booking.pricing.discountFee || 0,
           totalAmount,
@@ -95,7 +107,7 @@ export const verifyRazorpayPayment = async (req: AuthRequest, res: Response, nex
       .update(`${razorpay_order_id}|${razorpay_payment_id}`)
       .digest('hex');
 
-    const isValidSignature = generatedSignature === razorpay_signature || process.env.NODE_ENV === 'development' || !process.env.RAZORPAY_KEY_SECRET;
+    const isValidSignature = generatedSignature === razorpay_signature || env.NODE_ENV === 'development' || !env.RAZORPAY_KEY_SECRET;
 
     if (!isValidSignature) {
       payment.status = PaymentStatus.FAILED;
@@ -110,14 +122,19 @@ export const verifyRazorpayPayment = async (req: AuthRequest, res: Response, nex
     payment.paidAt = new Date();
     await payment.save();
 
-    booking.status = BookingStatus.ACCEPTED;
+    booking.status = BookingStatus.PAID;
+    booking.paymentStatus = PaymentStatus.PAID;
+    booking.gatewayOrderId = razorpay_order_id;
+    booking.gatewayPaymentId = razorpay_payment_id;
+    booking.paidAt = new Date();
     booking.statusHistory.push({
-      status: BookingStatus.ACCEPTED,
+      status: BookingStatus.PAID,
       changedBy: req.user!.id as any,
       timestamp: new Date(),
       notes: `Payment verified successfully via Razorpay (ID: ${razorpay_payment_id})`,
     });
     await booking.save();
+    await createEarningLedgerRecord(booking._id.toString());
 
     // Send Notification
     await createNotification(
@@ -156,7 +173,7 @@ export const handleRazorpayWebhook = async (req: AuthRequest, res: Response, nex
     const signature = req.headers['x-razorpay-signature'] as string;
     const bodyStr = JSON.stringify(req.body);
 
-    if (process.env.RAZORPAY_WEBHOOK_SECRET) {
+    if (env.RAZORPAY_WEBHOOK_SECRET) {
       const expectedSignature = crypto
         .createHmac('sha256', RAZORPAY_WEBHOOK_SECRET)
         .update(bodyStr)
@@ -264,6 +281,14 @@ export const updateManualPaymentStatus = async (req: AuthRequest, res: Response,
       await payment.save();
     }
 
+    if (paymentStatus === PaymentStatus.PAID) {
+      booking.paymentStatus = PaymentStatus.PAID;
+      if (booking.status === BookingStatus.PAYMENT_PENDING || booking.status === BookingStatus.IN_PROGRESS) {
+        booking.status = BookingStatus.PAID;
+      }
+      booking.paidAt = new Date();
+    }
+
     booking.statusHistory.push({
       status: booking.status,
       changedBy: req.user!.id as any,
@@ -272,8 +297,97 @@ export const updateManualPaymentStatus = async (req: AuthRequest, res: Response,
     });
     await booking.save();
 
+    if (paymentStatus === PaymentStatus.PAID) {
+      await createEarningLedgerRecord(booking._id.toString());
+    }
+
     return res.json({ success: true, message: `Manual payment status updated to ${paymentStatus}`, payment });
   } catch (error) {
     next(error);
   }
 };
+
+// 6. Record Cash / Direct Pay to Provider (Rapido-Style Payment Option)
+export const recordCashPayment = async (req: AuthRequest, res: Response, next: NextFunction) => {
+  try {
+    const { bookingId } = req.body;
+    const userId = req.user!.id;
+
+    const booking = await Booking.findById(bookingId);
+    if (!booking) {
+      return res.status(404).json({ success: false, message: 'Booking record not found' });
+    }
+
+    // Verify authorized user (Customer, Provider, or Admin)
+    const isCustomer = booking.customerId.toString() === userId;
+    const isProvider = booking.providerId?.toString() === userId || booking.assignedProviderId?.toString() === userId;
+    const isAdmin = req.user!.role === UserRole.ADMIN;
+
+    if (!isCustomer && !isProvider && !isAdmin) {
+      return res.status(403).json({ success: false, message: 'Access denied.' });
+    }
+
+    let payment = await Payment.findOne({ bookingId: booking._id });
+    if (!payment) {
+      payment = await Payment.create({
+        bookingId: booking._id,
+        customerId: booking.customerId,
+        providerId: booking.providerId,
+        clinicId: booking.clinicId,
+        labId: booking.labId,
+        amount: booking.pricing.totalAmount,
+        currency: 'INR',
+        status: PaymentStatus.PAID,
+        paymentMethod: PaymentMethod.CASH,
+        paymentSource: PaymentSource.MANUAL,
+        paidAt: new Date(),
+        pricingBreakdown: {
+          baseFee: booking.pricing.baseFee,
+          homeCollectionFee: booking.pricing.homeCollectionFee,
+          platformFee: Math.round(booking.pricing.totalAmount * 0.2), // 20% Platform fee
+          taxAmount: 0,
+          discountFee: booking.pricing.discountFee || 0,
+          totalAmount: booking.pricing.totalAmount,
+        },
+      });
+    } else {
+      payment.status = PaymentStatus.PAID;
+      payment.paymentMethod = PaymentMethod.CASH;
+      payment.paymentSource = PaymentSource.MANUAL;
+      payment.paidAt = new Date();
+      await payment.save();
+    }
+
+    if (!booking.providerId) {
+      if (req.body.providerId) booking.providerId = req.body.providerId;
+      else if (booking.assignedProviderId) booking.providerId = booking.assignedProviderId;
+      else if (isProvider) booking.providerId = userId as any;
+    }
+
+    booking.paymentStatus = PaymentStatus.PAID;
+    if (booking.status === BookingStatus.PAYMENT_PENDING || booking.status === BookingStatus.COMPLETED || booking.status === BookingStatus.IN_PROGRESS) {
+      booking.status = BookingStatus.PAID;
+    }
+    booking.paidAt = new Date();
+    booking.statusHistory.push({
+      status: booking.status,
+      changedBy: userId as any,
+      timestamp: new Date(),
+      notes: 'Cash payment collected / verified directly on service completion.',
+    });
+    await booking.save();
+
+    // Log 20% platform fee / 80% provider earnings entry in settlement ledger
+    await createEarningLedgerRecord(booking._id.toString());
+
+    return res.json({
+      success: true,
+      message: 'Cash payment recorded successfully. 20% platform commission and 80% provider earnings logged to settlement ledger.',
+      payment,
+      booking,
+    });
+  } catch (error) {
+    next(error);
+  }
+};
+

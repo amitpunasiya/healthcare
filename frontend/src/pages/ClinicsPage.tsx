@@ -2,6 +2,7 @@ import React, { useEffect, useState } from 'react';
 import { Link, useNavigate, useParams } from 'react-router-dom';
 import api from '../api/client';
 import { ClinicProfile } from '../types';
+import { extractCity } from '../utils/location';
 import { Building2, MapPin, Phone, ShieldCheck, CheckCircle2, ArrowRight, Navigation } from 'lucide-react';
 
 export const ClinicsPage: React.FC = () => {
@@ -42,14 +43,32 @@ export const ClinicsPage: React.FC = () => {
       async (position) => {
         const lat = position.coords.latitude;
         const lng = position.coords.longitude;
+        const inIndiaBounds = lat >= 6.5 && lat <= 35.7 && lng >= 68.1 && lng <= 97.4;
+        if (!inIndiaBounds) {
+          setLocLoading(false);
+          setLocStatus('Sorry, our services are currently available only in India.');
+          return;
+        }
         try {
           const res = await fetch(`https://nominatim.openstreetmap.org/reverse?format=json&lat=${lat}&lon=${lng}`);
           const data = await res.json();
           if (data && data.address) {
-            const detectedCity = data.address.city || data.address.town || data.address.village || data.address.suburb || 'Metropolis';
-            setSearchCity(detectedCity);
-            setLocStatus(`📍 Nearby clinics in ${detectedCity} (${lat.toFixed(4)}, ${lng.toFixed(4)})`);
-            fetchClinics(detectedCity);
+            const countryCode = data.address.country_code?.toLowerCase();
+            const countryName = data.address.country?.toLowerCase();
+            if ((countryCode && countryCode !== 'in') || (countryName && !countryName.includes('india'))) {
+              setLocLoading(false);
+              setLocStatus('Sorry, our services are currently available only in India.');
+              return;
+            }
+            const detectedCity = extractCity(data.address);
+            if (detectedCity) {
+              setSearchCity(detectedCity);
+              setLocStatus(`📍 Nearby clinics in ${detectedCity} (${lat.toFixed(4)}, ${lng.toFixed(4)})`);
+              fetchClinics(detectedCity);
+            } else {
+              setLocStatus(`📍 GPS Location captured (${lat.toFixed(4)}, ${lng.toFixed(4)}). Please enter city name manually.`);
+              fetchClinics();
+            }
           } else {
             fetchClinics();
           }
@@ -156,14 +175,11 @@ export const ClinicsPage: React.FC = () => {
                   View Clinic
                 </Link>
                 <button
-                  onClick={() => {
-                    const cUserId = c.userId?._id || c.userId;
-                    navigate(`/book?mode=CLINIC_VISIT&clinicId=${cUserId}`);
-                  }}
+                  onClick={() => navigate('/book?mode=HOME_VISIT')}
                   className="btn btn-primary btn-sm"
                   style={{ flex: 1, justifyContent: 'center' }}
                 >
-                  Book Appointment
+                  Book Home Visit
                 </button>
               </div>
             </div>
@@ -188,7 +204,7 @@ export const ClinicProfilePage: React.FC = () => {
           setClinic(res.data.clinic);
         }
       } catch (err) {
-        console.error('Failed to load clinic profile', err);
+        console.error('Failed to load clinic details', err);
       } finally {
         setLoading(false);
       }
@@ -197,35 +213,36 @@ export const ClinicProfilePage: React.FC = () => {
   }, [clinicId]);
 
   if (loading) return <div className="container" style={{ padding: '4rem', textAlign: 'center' }}>Loading clinic profile...</div>;
-  if (!clinic) return <div className="container" style={{ padding: '4rem', textAlign: 'center' }}>Clinic not found.</div>;
+  if (!clinic) return <div className="container" style={{ padding: '4rem', textAlign: 'center' }}>Clinic not found</div>;
 
   return (
     <div className="container" style={{ padding: '3.5rem 1.5rem', maxWidth: '1000px' }}>
-      <div className="card" style={{ padding: '2.5rem', marginBottom: '2rem' }}>
-        <div style={{ display: 'flex', gap: '0.5rem', alignItems: 'center', marginBottom: '0.5rem' }}>
-          <h1 style={{ fontSize: '2rem', fontWeight: 800 }}>{clinic.clinicName}</h1>
-          <ShieldCheck size={26} color="#10b981" />
-        </div>
-        <p style={{ color: 'var(--text-muted)', fontSize: '1rem', display: 'flex', alignItems: 'center', gap: '0.4rem', marginBottom: '1rem' }}>
-          <MapPin size={18} color="var(--primary)" /> {clinic.addressLine1}, {clinic.city}, {clinic.state} - {clinic.pincode}
-        </p>
+      <button onClick={() => navigate(-1)} className="btn btn-outline btn-sm" style={{ marginBottom: '1.5rem' }}>
+        ← Back
+      </button>
 
-        <p style={{ color: 'var(--text-main)', fontSize: '0.95rem', lineHeight: 1.6 }}>
-          {clinic.description || 'Verified healthcare clinic facility providing comprehensive outpatient care and specialist appointments.'}
-        </p>
-      </div>
-
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(300px, 1fr))', gap: '2rem' }}>
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(320px, 1fr))', gap: '2.5rem' }}>
         <div>
           <div className="card" style={{ marginBottom: '1.5rem' }}>
-            <h3 style={{ fontSize: '1.2rem', fontWeight: 700, marginBottom: '1rem' }}>Offered Services</h3>
+            <h1 style={{ fontSize: '1.8rem', fontWeight: 800, marginBottom: '0.5rem', color: 'var(--text-main)' }}>
+              {clinic.clinicName}
+            </h1>
+            <p style={{ color: 'var(--text-muted)', display: 'flex', alignItems: 'center', gap: '0.4rem', marginBottom: '1rem', fontSize: '0.95rem' }}>
+              <MapPin size={16} color="var(--primary)" /> {clinic.addressLine1}, {clinic.city} ({clinic.pincode})
+            </p>
+            <p style={{ color: 'var(--text-muted)', lineHeight: 1.6, fontSize: '0.95rem' }}>
+              {clinic.description || 'Verified healthcare center offering home visit specialists and clinical consultation.'}
+            </p>
+          </div>
+
+          <div className="card">
+            <h3 style={{ fontSize: '1.2rem', fontWeight: 700, marginBottom: '1rem' }}>Services Available</h3>
             {clinic.servicesOffered && clinic.servicesOffered.length > 0 ? (
-              <div style={{ display: 'flex', flexDirection: 'column', gap: '0.6rem' }}>
-                {clinic.servicesOffered.map((srv) => (
-                  <div key={srv._id} style={{ display: 'flex', justifyContent: 'space-between', padding: '0.65rem 0.85rem', backgroundColor: '#f8fafc', borderRadius: '6px' }}>
-                    <span style={{ fontWeight: 600 }}>{srv.name}</span>
-                    <span style={{ fontWeight: 700, color: 'var(--primary)' }}>₹{srv.basePrice}</span>
-                  </div>
+              <div style={{ display: 'flex', flexWrap: 'wrap', gap: '0.5rem' }}>
+                {clinic.servicesOffered.map((s: any, idx) => (
+                  <span key={idx} style={{ background: '#f1f5f9', padding: '0.35rem 0.75rem', borderRadius: '8px', fontSize: '0.85rem', fontWeight: 600 }}>
+                    {s.name || s}
+                  </span>
                 ))}
               </div>
             ) : (
@@ -247,14 +264,11 @@ export const ClinicProfilePage: React.FC = () => {
             </div>
 
             <button
-              onClick={() => {
-                const cUserId = clinic.userId?._id || clinic.userId;
-                navigate(`/book?mode=CLINIC_VISIT&clinicId=${cUserId}`);
-              }}
+              onClick={() => navigate('/book?mode=HOME_VISIT')}
               className="btn btn-primary btn-lg"
               style={{ width: '100%', marginTop: '1.5rem', justifyContent: 'center' }}
             >
-              Book Clinic Appointment <ArrowRight size={18} />
+              Book Home Visit Care <ArrowRight size={18} />
             </button>
           </div>
         </div>

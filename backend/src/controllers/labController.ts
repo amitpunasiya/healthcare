@@ -12,6 +12,7 @@ export const getPublicLabs = async (req: Request, res: Response, next: NextFunct
       role: UserRole.LAB,
       verificationStatus: VerificationStatus.VERIFIED,
       isActive: true,
+      isBlocked: { $ne: true },
     }).select('_id');
 
     const filter: any = {
@@ -32,21 +33,30 @@ export const getPublicLabs = async (req: Request, res: Response, next: NextFunct
 };
 
 // Get single lab profile
-export const getLabById = async (req: Request, res: Response, next: NextFunction) => {
+export const getLabById = async (req: any, res: Response, next: NextFunction) => {
   try {
     const { id } = req.params;
     let lab = await LabProfile.findById(id)
-      .populate('userId', 'email phone verificationStatus')
+      .populate('userId', 'email phone verificationStatus isActive role isBlocked')
       .populate('testsOffered');
 
     if (!lab) {
       lab = await LabProfile.findOne({ userId: id })
-        .populate('userId', 'email phone verificationStatus')
+        .populate('userId', 'email phone verificationStatus isActive role isBlocked')
         .populate('testsOffered');
     }
 
     if (!lab) {
       return res.status(404).json({ success: false, message: 'Lab profile not found' });
+    }
+
+    const linkedUser = lab.userId as any;
+    const isOwnerOrAdmin = req.user && (req.user.id === linkedUser?._id?.toString() || req.user.role === 'ADMIN');
+    
+    if (!isOwnerOrAdmin) {
+      if (!linkedUser || linkedUser.verificationStatus !== VerificationStatus.VERIFIED || linkedUser.isActive === false || linkedUser.isBlocked) {
+        return res.status(404).json({ success: false, message: 'Lab profile not found or unavailable' });
+      }
     }
 
     return res.json({ success: true, lab });

@@ -31,6 +31,18 @@ export const MyBookingsPage: React.FC = () => {
       navigate('/auth/login?redirect=/bookings');
       return;
     }
+    if (user.role === 'PROVIDER') {
+      navigate('/provider/bookings');
+      return;
+    }
+    if (user.role === 'CLINIC') {
+      navigate('/clinic/bookings');
+      return;
+    }
+    if (user.role === 'LAB') {
+      navigate('/lab/bookings');
+      return;
+    }
     fetchBookings();
   }, [user]);
 

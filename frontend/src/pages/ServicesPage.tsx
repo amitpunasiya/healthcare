@@ -18,7 +18,16 @@ export const ServicesPage: React.FC = () => {
         const cRes = await api.get('/services/categories');
         const sRes = await api.get('/services');
 
-        if (cRes.data.success) setCategories(cRes.data.categories);
+        if (cRes.data.success) {
+          const seen = new Set<string>();
+          const deduplicated = cRes.data.categories.filter((cat: any) => {
+            const key = (cat.slug || cat.name).toLowerCase().replace(/s$/, '').replace(/[^a-z0-9]/g, '');
+            if (seen.has(key)) return false;
+            seen.add(key);
+            return true;
+          });
+          setCategories(deduplicated);
+        }
         if (sRes.data.success) setServices(sRes.data.services);
       } catch (err) {
         console.error('Failed to load services data', err);
@@ -75,13 +84,9 @@ export const ServicesPage: React.FC = () => {
         </div>
 
         <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
-          <span style={{ fontSize: '0.85rem', fontWeight: 600, color: 'var(--text-muted)' }}>Delivery Mode:</span>
-          <select value={selectedMode} onChange={(e) => setSelectedMode(e.target.value)} className="form-select" style={{ width: '160px' }}>
-            <option value="ALL">All Modes</option>
-            <option value="HOME_VISIT">Home Visit</option>
-            <option value="CLINIC_VISIT">Clinic Visit</option>
-            <option value="LAB_VISIT">Lab Visit</option>
-          </select>
+          <span style={{ fontSize: '0.85rem', fontWeight: 700, color: 'var(--primary)', backgroundColor: 'var(--primary-light)', padding: '0.3rem 0.75rem', borderRadius: '8px' }}>
+            🏠 100% Home Visit Services
+          </span>
         </div>
       </div>
 
@@ -99,11 +104,21 @@ export const ServicesPage: React.FC = () => {
             return (
               <div key={srv._id} className="card card-hover" style={{ display: 'flex', flexDirection: 'column', justifyContent: 'space-between' }}>
                 <div>
-                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '0.75rem' }}>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '0.75rem', flexWrap: 'wrap', gap: '0.5rem' }}>
                     <span style={{ fontSize: '0.75rem', backgroundColor: 'var(--primary-light)', color: 'var(--primary-dark)', fontWeight: 700, padding: '0.25rem 0.65rem', borderRadius: '999px' }}>
                       {catName}
                     </span>
-                    <span style={{ fontSize: '1.25rem', fontWeight: 800, color: 'var(--primary)' }}>₹{srv.basePrice}</span>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', flexWrap: 'wrap' }}>
+                      <span style={{ fontSize: '1.25rem', fontWeight: 800, color: 'var(--primary)' }}>₹{srv.basePrice}</span>
+                      {srv.originalPrice && srv.originalPrice > srv.basePrice && (
+                        <>
+                          <span style={{ fontSize: '0.85rem', textDecoration: 'line-through', color: '#94a3b8', fontWeight: 500 }}>₹{srv.originalPrice}</span>
+                          <span style={{ fontSize: '0.7rem', fontWeight: 800, backgroundColor: '#dcfce7', color: '#15803d', padding: '0.15rem 0.45rem', borderRadius: '4px' }}>
+                            {srv.discountPercent ? `${srv.discountPercent}% OFF` : `${Math.round(((srv.originalPrice - srv.basePrice) / srv.originalPrice) * 100)}% OFF`}
+                          </span>
+                        </>
+                      )}
+                    </div>
                   </div>
 
                   <h3 style={{ fontSize: '1.2rem', fontWeight: 700, color: 'var(--text-main)', marginBottom: '0.4rem' }}>{srv.name}</h3>

@@ -11,6 +11,9 @@ export interface IService extends Document {
   engagementTypesSupported: EngagementType[];
   prepInstructions?: string;
   sampleCollectionInfo?: string;
+  originalPrice?: number;
+  discountPercent?: number;
+  testCategory?: string;
   isActive: boolean;
   createdAt: Date;
   updatedAt: Date;
@@ -22,6 +25,9 @@ const ServiceSchema: Schema = new Schema(
     name: { type: String, required: true, trim: true },
     description: { type: String, required: true },
     basePrice: { type: Number, required: true, default: 0 },
+    originalPrice: { type: Number },
+    discountPercent: { type: Number, default: 0 },
+    testCategory: { type: String },
     durationMinutes: { type: Number, default: 45 },
     serviceModesSupported: [
       {

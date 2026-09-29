@@ -27,8 +27,9 @@ export const CustomerDashboard: React.FC = () => {
   };
 
   useEffect(() => {
+    if (!user) return;
     fetchBookings();
-  }, []);
+  }, [user]);
 
   const handleOpenDetails = async (b: Booking) => {
     setSelectedBooking(b);
@@ -77,6 +78,18 @@ export const CustomerDashboard: React.FC = () => {
           <p style={{ color: 'var(--text-muted)' }}>Manage your appointments & regular recurring hiring plans</p>
         </div>
       </div>
+
+      {/* Helper Banner for Explanation & Provider Testing */}
+      {bookings.some((b) => b.status === 'REQUESTED') && (
+        <div style={{ backgroundColor: '#f0f9ff', border: '1px solid #bae6fd', padding: '1rem 1.25rem', borderRadius: '14px', marginBottom: '1.75rem', display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '1rem', flexWrap: 'wrap' }}>
+          <div style={{ fontSize: '0.875rem', color: '#0369a1', fontWeight: 600 }}>
+            💡 <strong>Patient Note:</strong> Your request is currently <strong>REQUESTED</strong> and broadcasted to nearby healthcare specialists. Accept/Reject options appear on the <strong>Provider Dashboard</strong> for specialists.
+          </div>
+          <a href="/auth/login" className="btn btn-outline btn-sm" style={{ borderRadius: '8px', fontWeight: 700, textDecoration: 'none', backgroundColor: 'white' }}>
+            👨‍⚕️ Switch to Provider Account
+          </a>
+        </div>
+      )}
 
       {/* Filter Tabs */}
       <div style={{ display: 'flex', gap: '0.5rem', marginBottom: '2rem', flexWrap: 'wrap' }}>

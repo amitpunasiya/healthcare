@@ -5,9 +5,17 @@ import {
   handleRazorpayWebhook,
   getMyPayments,
   updateManualPaymentStatus,
+  recordCashPayment,
 } from '../controllers/paymentController';
 import { authenticateToken, authorizeRoles } from '../middlewares/auth';
+import { validateRequest } from '../middlewares/validate';
 import { UserRole } from '../constants/enums';
+import {
+  createRazorpayOrderSchema,
+  verifyRazorpayPaymentSchema,
+  recordCashPaymentSchema,
+  manualPaymentParamSchema,
+} from '../validators/paymentValidators';
 
 const router = Router();
 
@@ -17,9 +25,10 @@ router.post('/webhook', handleRazorpayWebhook);
 // Protected routes
 router.use(authenticateToken);
 
-router.post('/create-order', createRazorpayOrder);
-router.post('/verify', verifyRazorpayPayment);
+router.post('/create-order', validateRequest(createRazorpayOrderSchema), createRazorpayOrder);
+router.post('/verify', validateRequest(verifyRazorpayPaymentSchema), verifyRazorpayPayment);
+router.post('/cash-payment', validateRequest(recordCashPaymentSchema), recordCashPayment);
 router.get('/', getMyPayments);
-router.patch('/manual/:bookingId', authorizeRoles(UserRole.ADMIN), updateManualPaymentStatus);
+router.patch('/manual/:bookingId', authorizeRoles(UserRole.ADMIN), validateRequest(manualPaymentParamSchema), updateManualPaymentStatus);
 
 export default router;

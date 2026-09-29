@@ -35,6 +35,7 @@ export const ClinicDashboard: React.FC = () => {
   };
 
   useEffect(() => {
+    if (!user || (user.role !== 'CLINIC' && user.role !== 'ADMIN')) return;
     fetchBookings();
     const fetchServices = async () => {
       const res = await api.get('/services');
@@ -44,7 +45,7 @@ export const ClinicDashboard: React.FC = () => {
       }
     };
     fetchServices();
-  }, []);
+  }, [user]);
 
   const handleCreateManualBooking = async (e: React.FormEvent) => {
     e.preventDefault();

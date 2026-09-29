@@ -34,6 +34,7 @@ export const LabDashboard: React.FC = () => {
   };
 
   useEffect(() => {
+    if (!user || (user.role !== 'LAB' && user.role !== 'ADMIN')) return;
     fetchBookings();
     const fetchLabTests = async () => {
       const res = await api.get('/services');
@@ -43,7 +44,7 @@ export const LabDashboard: React.FC = () => {
       }
     };
     fetchLabTests();
-  }, []);
+  }, [user]);
 
   const handleCreateManualTestBooking = async (e: React.FormEvent) => {
     e.preventDefault();

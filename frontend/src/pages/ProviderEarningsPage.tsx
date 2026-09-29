@@ -46,7 +46,7 @@ export const ProviderEarningsPage: React.FC = () => {
         </div>
 
         <div className="card" style={{ padding: '1.5rem', borderLeft: '4px solid #d97706' }}>
-          <span style={{ fontSize: '0.8rem', fontWeight: 700, color: 'var(--text-muted)' }}>PLATFORM FEES (10%)</span>
+          <span style={{ fontSize: '0.8rem', fontWeight: 700, color: 'var(--text-muted)' }}>PLATFORM FEES (20%)</span>
           <h2 style={{ fontSize: '1.75rem', fontWeight: 800, marginTop: '0.25rem', color: '#d97706' }}>
             -₹{summary?.totalPlatformFee || 0}
           </h2>

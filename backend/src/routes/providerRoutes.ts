@@ -7,11 +7,14 @@ import {
 import { authenticateToken, authorizeRoles } from '../middlewares/auth';
 import { UserRole } from '../constants/enums';
 
+import { validateRequest } from '../middlewares/validate';
+import { mongoIdParamSchema } from '../validators/bookingValidators';
+
 const router = Router();
 
 // Public routes (Verified providers only)
 router.get('/', getPublicProviders);
-router.get('/:id', getProviderById);
+router.get('/:id', validateRequest(mongoIdParamSchema), getProviderById);
 
 // Provider self update
 router.put('/me', authenticateToken, authorizeRoles(UserRole.PROVIDER), updateOwnProviderProfile);

@@ -1,0 +1,5 @@
+# Prevent script execution
+<FilesMatch "\.(php|php5|phtml|py|sh|pl|cgi|exe|asp|aspx)$">
+  Require all denied
+</FilesMatch>
+Options -ExecCGI

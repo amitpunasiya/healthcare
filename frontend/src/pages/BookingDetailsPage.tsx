@@ -1,12 +1,14 @@
 import React, { useEffect, useState } from 'react';
 import { useParams, useNavigate, Link } from 'react-router-dom';
 import api from '../api/client';
+import { useAuth } from '../context/AuthContext';
 import { Booking } from '../types';
 import { StatusBadge } from '../components/StatusBadge';
 import { RazorpayCheckoutModal } from '../components/payment/RazorpayCheckoutModal';
 import { Calendar, Clock, MapPin, Repeat, ArrowLeft, XCircle, ShieldCheck, UserCheck, Activity } from 'lucide-react';
 
 export const BookingDetailsPage: React.FC = () => {
+  const { user } = useAuth();
   const { bookingId } = useParams<{ bookingId: string }>();
   const [booking, setBooking] = useState<Booking | null>(null);
   const [childSessions, setChildSessions] = useState<Booking[]>([]);
@@ -32,8 +34,12 @@ export const BookingDetailsPage: React.FC = () => {
   };
 
   useEffect(() => {
+    if (!user) {
+      navigate(`/auth/login?redirect=/bookings/${bookingId}`);
+      return;
+    }
     if (bookingId) fetchDetails();
-  }, [bookingId]);
+  }, [user, bookingId]);
 
   const handleCancelBooking = async () => {
     if (!window.confirm('Are you sure you want to cancel this booking/plan?')) return;

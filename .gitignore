@@ -9,10 +9,19 @@ build/
 
 # Environment & Secrets
 .env
-.env.local
-.env.development.local
-.env.test.local
-.env.production.local
+.env.*
+*.env
+*.env.*
+**/.env
+**/.env.*
+!.env.example
+!**/.env.example
+*.pem
+*.key
+*.cert
+*.crt
+id_rsa
+id_rsa.pub
 
 # Logs
 logs
@@ -29,3 +38,10 @@ Thumbs.db
 
 # Scratch & Brain
 scratch/
+
+# Uploads
+backend/uploads/*
+!backend/uploads/documents/
+backend/uploads/documents/*
+!backend/uploads/documents/.htaccess
+!backend/uploads/documents/.gitkeep

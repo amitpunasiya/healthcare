@@ -13,6 +13,8 @@ export interface IClinicProfile extends Document {
   state: string;
   pincode: string;
   googleMapsUrl?: string;
+  latitude?: number;
+  longitude?: number;
   photos: string[];
   description?: string;
   servicesOffered: mongoose.Types.ObjectId[];
@@ -36,6 +38,8 @@ const ClinicProfileSchema: Schema = new Schema(
     state: { type: String, required: true },
     pincode: { type: String, required: true },
     googleMapsUrl: { type: String },
+    latitude: { type: Number },
+    longitude: { type: Number },
     photos: [{ type: String }],
     description: { type: String },
     servicesOffered: [{ type: Schema.Types.ObjectId, ref: 'Service' }],

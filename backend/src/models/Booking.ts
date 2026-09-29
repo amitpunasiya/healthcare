@@ -39,6 +39,7 @@ export interface IBooking extends Document {
   };
 
   providerId?: mongoose.Types.ObjectId;
+  assignedProviderId?: mongoose.Types.ObjectId;
   clinicId?: mongoose.Types.ObjectId;
   labId?: mongoose.Types.ObjectId;
 
@@ -57,9 +58,17 @@ export interface IBooking extends Document {
     label?: string;
     addressLine1: string;
     addressLine2?: string;
+    houseNumber?: string;
+    flatNumber?: string;
+    buildingName?: string;
+    street?: string;
+    area?: string;
+    district?: string;
     city: string;
     state: string;
     pincode: string;
+    country?: string;
+    countryCode?: string;
     landmark?: string;
     latitude?: number;
     longitude?: number;
@@ -77,6 +86,24 @@ export interface IBooking extends Document {
     discountFee: number;
     totalAmount: number;
   };
+
+  nearbyProviderCount?: number;
+  providerResponses?: Array<{
+    providerId: mongoose.Types.ObjectId;
+    status: 'PENDING' | 'ACCEPTED' | 'REJECTED' | 'CANCELLED';
+    respondedAt?: Date;
+    distance?: number;
+    rejectionReason?: string;
+  }>;
+
+  serviceOtp?: string;
+  serviceOtpHash?: string;
+  serviceStartedAt?: Date;
+  serviceCompletedAt?: Date;
+  paymentStatus?: string;
+  gatewayOrderId?: string;
+  gatewayPaymentId?: string;
+  paidAt?: Date;
 
   status: BookingStatus;
   statusHistory: IStatusHistoryItem[];
@@ -113,6 +140,7 @@ const BookingSchema: Schema = new Schema(
     },
 
     providerId: { type: Schema.Types.ObjectId, ref: 'User', index: true },
+    assignedProviderId: { type: Schema.Types.ObjectId, ref: 'User', index: true },
     clinicId: { type: Schema.Types.ObjectId, ref: 'User', index: true },
     labId: { type: Schema.Types.ObjectId, ref: 'User', index: true },
 
@@ -131,9 +159,17 @@ const BookingSchema: Schema = new Schema(
       label: { type: String },
       addressLine1: { type: String },
       addressLine2: { type: String },
+      houseNumber: { type: String },
+      flatNumber: { type: String },
+      buildingName: { type: String },
+      street: { type: String },
+      area: { type: String },
+      district: { type: String },
       city: { type: String },
       state: { type: String },
       pincode: { type: String },
+      country: { type: String, default: 'India' },
+      countryCode: { type: String, default: 'IN' },
       landmark: { type: String },
       latitude: { type: Number },
       longitude: { type: Number },
@@ -152,7 +188,27 @@ const BookingSchema: Schema = new Schema(
       totalAmount: { type: Number, required: true },
     },
 
-    status: { type: String, enum: Object.values(BookingStatus), default: BookingStatus.PENDING, index: true },
+    nearbyProviderCount: { type: Number, default: 0 },
+    providerResponses: [
+      {
+        providerId: { type: Schema.Types.ObjectId, ref: 'User' },
+        status: { type: String, enum: ['PENDING', 'ACCEPTED', 'REJECTED', 'CANCELLED'], default: 'PENDING' },
+        respondedAt: { type: Date },
+        distance: { type: Number },
+        rejectionReason: { type: String },
+      },
+    ],
+
+    serviceOtp: { type: String },
+    serviceOtpHash: { type: String },
+    serviceStartedAt: { type: Date },
+    serviceCompletedAt: { type: Date },
+    paymentStatus: { type: String, default: 'PENDING', index: true },
+    gatewayOrderId: { type: String },
+    gatewayPaymentId: { type: String },
+    paidAt: { type: Date },
+
+    status: { type: String, enum: Object.values(BookingStatus), default: BookingStatus.REQUESTED, index: true },
     statusHistory: [
       {
         status: { type: String, enum: Object.values(BookingStatus), required: true },
@@ -166,8 +222,10 @@ const BookingSchema: Schema = new Schema(
   { timestamps: true }
 );
 
-// Compound indexes for availability conflict checks & parent-child listings
+// Compound indexes for availability conflict checks, parent-child listings & analytics
 BookingSchema.index({ providerId: 1, bookingDate: 1, 'timeSlot.startTime': 1 });
+BookingSchema.index({ providerId: 1, bookingDate: 1, status: 1 });
+BookingSchema.index({ assignedProviderId: 1, bookingDate: 1, status: 1 });
 BookingSchema.index({ clinicId: 1, bookingDate: 1, 'timeSlot.startTime': 1 });
 BookingSchema.index({ labId: 1, bookingDate: 1, 'timeSlot.startTime': 1 });
 

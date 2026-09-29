@@ -12,6 +12,7 @@ export const getPublicClinics = async (req: Request, res: Response, next: NextFu
       role: UserRole.CLINIC,
       verificationStatus: VerificationStatus.VERIFIED,
       isActive: true,
+      isBlocked: { $ne: true },
     }).select('_id');
 
     const filter: any = {
@@ -21,7 +22,7 @@ export const getPublicClinics = async (req: Request, res: Response, next: NextFu
     if (city) filter.city = new RegExp(city as string, 'i');
 
     const clinics = await ClinicProfile.find(filter)
-      .populate('userId', 'email phone verificationStatus')
+      .populate('userId', 'email phone verificationStatus isBlocked')
       .populate('servicesOffered')
       .populate('associatedProviders');
 
@@ -36,7 +37,7 @@ export const getClinicById = async (req: Request, res: Response, next: NextFunct
   try {
     const { id } = req.params;
     let clinic = await ClinicProfile.findById(id)
-      .populate('userId', 'email phone verificationStatus')
+      .populate('userId', 'email phone verificationStatus isBlocked')
       .populate('servicesOffered')
       .populate({
         path: 'associatedProviders',
@@ -45,7 +46,7 @@ export const getClinicById = async (req: Request, res: Response, next: NextFunct
 
     if (!clinic) {
       clinic = await ClinicProfile.findOne({ userId: id })
-        .populate('userId', 'email phone verificationStatus')
+        .populate('userId', 'email phone verificationStatus isBlocked')
         .populate('servicesOffered')
         .populate({
           path: 'associatedProviders',
@@ -55,6 +56,11 @@ export const getClinicById = async (req: Request, res: Response, next: NextFunct
 
     if (!clinic) {
       return res.status(404).json({ success: false, message: 'Clinic profile not found' });
+    }
+
+    const linkedUser = clinic.userId as any;
+    if (linkedUser && (linkedUser.isBlocked || !linkedUser.isActive)) {
+      return res.status(404).json({ success: false, message: 'Clinic profile not found or unavailable' });
     }
 
     return res.json({ success: true, clinic });

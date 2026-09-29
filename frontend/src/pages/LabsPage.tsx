@@ -2,6 +2,7 @@ import React, { useEffect, useState } from 'react';
 import { Link, useNavigate, useParams } from 'react-router-dom';
 import api from '../api/client';
 import { LabProfile } from '../types';
+import { extractCity } from '../utils/location';
 import { FlaskConical, MapPin, CheckCircle2, ShieldCheck, Home, ArrowRight, Navigation } from 'lucide-react';
 
 export const LabsPage: React.FC = () => {
@@ -44,14 +45,32 @@ export const LabsPage: React.FC = () => {
       async (position) => {
         const lat = position.coords.latitude;
         const lng = position.coords.longitude;
+        const inIndiaBounds = lat >= 6.5 && lat <= 35.7 && lng >= 68.1 && lng <= 97.4;
+        if (!inIndiaBounds) {
+          setLocLoading(false);
+          setLocStatus('Sorry, our services are currently available only in India.');
+          return;
+        }
         try {
           const res = await fetch(`https://nominatim.openstreetmap.org/reverse?format=json&lat=${lat}&lon=${lng}`);
           const data = await res.json();
           if (data && data.address) {
-            const detectedCity = data.address.city || data.address.town || data.address.village || data.address.suburb || 'Metropolis';
-            setSearchCity(detectedCity);
-            setLocStatus(`📍 Nearby labs in ${detectedCity} (${lat.toFixed(4)}, ${lng.toFixed(4)})`);
-            fetchLabs(detectedCity);
+            const countryCode = data.address.country_code?.toLowerCase();
+            const countryName = data.address.country?.toLowerCase();
+            if ((countryCode && countryCode !== 'in') || (countryName && !countryName.includes('india'))) {
+              setLocLoading(false);
+              setLocStatus('Sorry, our services are currently available only in India.');
+              return;
+            }
+            const detectedCity = extractCity(data.address);
+            if (detectedCity) {
+              setSearchCity(detectedCity);
+              setLocStatus(`📍 Nearby labs in ${detectedCity} (${lat.toFixed(4)}, ${lng.toFixed(4)})`);
+              fetchLabs(detectedCity);
+            } else {
+              setLocStatus(`📍 GPS Location captured (${lat.toFixed(4)}, ${lng.toFixed(4)}). Please enter city name manually.`);
+              fetchLabs();
+            }
           } else {
             fetchLabs();
           }
@@ -146,16 +165,9 @@ export const LabsPage: React.FC = () => {
                 </p>
 
                 <div style={{ display: 'flex', gap: '0.4rem', flexWrap: 'wrap', marginBottom: '1rem' }}>
-                  {l.homeSampleCollectionAvailable && (
-                    <span style={{ fontSize: '0.75rem', background: '#dcfce7', color: '#15803d', padding: '0.2rem 0.6rem', borderRadius: '6px', fontWeight: 600 }}>
-                      Home Collection (+₹{l.homeCollectionFee})
-                    </span>
-                  )}
-                  {l.labVisitAvailable && (
-                    <span style={{ fontSize: '0.75rem', background: '#e0f2fe', color: '#0369a1', padding: '0.2rem 0.6rem', borderRadius: '6px', fontWeight: 600 }}>
-                      Center Visit
-                    </span>
-                  )}
+                  <span style={{ fontSize: '0.75rem', background: '#dcfce7', color: '#15803d', padding: '0.2rem 0.6rem', borderRadius: '6px', fontWeight: 600 }}>
+                    🏠 Home Sample Collection (+₹{l.homeCollectionFee})
+                  </span>
                 </div>
 
                 <div style={{ fontSize: '0.85rem', color: 'var(--text-main)', marginBottom: '1.25rem' }}>
@@ -170,12 +182,12 @@ export const LabsPage: React.FC = () => {
                 <button
                   onClick={() => {
                     const lUserId = l.userId?._id || l.userId;
-                    navigate(`/book?mode=LAB_VISIT&labId=${lUserId}`);
+                    navigate(`/book?mode=HOME_VISIT&labId=${lUserId}`);
                   }}
                   className="btn btn-primary btn-sm"
                   style={{ flex: 1, justifyContent: 'center' }}
                 >
-                  Book Lab Test
+                  Book Home Collection
                 </button>
               </div>
             </div>
@@ -267,12 +279,12 @@ export const LabProfilePage: React.FC = () => {
             <button
               onClick={() => {
                 const lUserId = lab.userId?._id || lab.userId;
-                navigate(`/book?mode=LAB_VISIT&labId=${lUserId}`);
+                navigate(`/book?mode=HOME_VISIT&labId=${lUserId}`);
               }}
               className="btn btn-primary btn-lg"
               style={{ width: '100%', marginTop: '1.5rem', justifyContent: 'center' }}
             >
-              Book Lab Test Now <ArrowRight size={18} />
+              Book Home Sample Collection <ArrowRight size={18} />
             </button>
           </div>
         </div>

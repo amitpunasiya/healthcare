@@ -60,8 +60,9 @@ export const ProviderProfilePage: React.FC = () => {
           </div>
 
           <div style={{ textAlign: 'right' }}>
-            <div style={{ fontSize: '0.85rem', color: 'var(--text-muted)', fontWeight: 600 }}>Standard Session Fee</div>
-            <div style={{ fontSize: '2rem', fontWeight: 800, color: 'var(--primary)' }}>₹{provider.chargesPerSession}</div>
+            <div style={{ fontSize: '2rem', fontWeight: 800, color: 'var(--primary)' }}>
+              ₹{provider.category?.slug === 'physiotherapy' ? 450 : provider.category?.slug === 'occupational-therapy' ? 550 : (provider.chargesPerSession || 450)}
+            </div>
           </div>
         </div>
       </div>
@@ -119,11 +120,8 @@ export const ProviderProfilePage: React.FC = () => {
           <div className="card">
             <h3 style={{ fontSize: '1.2rem', fontWeight: 700, marginBottom: '1rem' }}>Delivery Options</h3>
             <div style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem', fontSize: '0.9rem' }}>
-              <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', color: provider.homeVisitAvailable ? '#16a34a' : '#94a3b8' }}>
-                <CheckCircle2 size={18} /> Home Visit Available
-              </div>
-              <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', color: provider.clinicVisitAvailable ? '#16a34a' : '#94a3b8' }}>
-                <CheckCircle2 size={18} /> Clinic Visit Available
+              <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', color: '#16a34a' }}>
+                <CheckCircle2 size={18} /> 🏠 100% Home Visit Care Available
               </div>
             </div>
 

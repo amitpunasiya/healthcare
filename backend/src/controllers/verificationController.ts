@@ -8,7 +8,8 @@ import { UserRole, VerificationStatus } from '../constants/enums';
 export const getPendingVerifications = async (req: Request, res: Response, next: NextFunction) => {
   try {
     const pendingUsers = await User.find({
-      verificationStatus: VerificationStatus.PENDING_VERIFICATION,
+      role: { $in: [UserRole.PROVIDER, UserRole.CLINIC, UserRole.LAB] },
+      verificationStatus: { $in: [VerificationStatus.PENDING_VERIFICATION, 'PENDING' as any] },
     }).select('-passwordHash');
 
     const result = await Promise.all(
@@ -27,6 +28,14 @@ export const getPendingVerifications = async (req: Request, res: Response, next:
           profile,
         };
       })
+    );
+
+    const providerCount = result.filter((r) => r.user.role === UserRole.PROVIDER).length;
+    const clinicCount = result.filter((r) => r.user.role === UserRole.CLINIC).length;
+    const labCount = result.filter((r) => r.user.role === UserRole.LAB).length;
+
+    console.log(
+      `[Admin Verification] Found ${result.length} pending applications (${providerCount} Providers, ${clinicCount} Clinics, ${labCount} Labs)`
     );
 
     return res.json({ success: true, count: result.length, pendingVerifications: result });
@@ -57,6 +66,8 @@ export const updateVerificationStatus = async (req: Request, res: Response, next
     }
 
     await user.save();
+
+    console.log(`[Admin Verification] User ${user.email} (${user.role}) status updated to ${status}`);
 
     return res.json({
       success: true,

@@ -41,7 +41,16 @@ export const ProvidersPage: React.FC = () => {
   useEffect(() => {
     const fetchCats = async () => {
       const res = await api.get('/services/categories');
-      if (res.data.success) setCategories(res.data.categories);
+      if (res.data.success) {
+        const seen = new Set<string>();
+        const deduplicated = res.data.categories.filter((cat: any) => {
+          const key = (cat.slug || cat.name).toLowerCase().replace(/s$/, '').replace(/[^a-z0-9]/g, '');
+          if (seen.has(key)) return false;
+          seen.add(key);
+          return true;
+        });
+        setCategories(deduplicated);
+      }
     };
     fetchCats();
   }, []);
@@ -70,7 +79,7 @@ export const ProvidersPage: React.FC = () => {
           Find Verified Healthcare Professionals
         </h1>
         <p style={{ color: 'var(--text-muted)', fontSize: '1.05rem', lineHeight: 1.6 }}>
-          Discover admin-verified physiotherapists, occupational therapists, pediatric nurses, and senior care specialists available for home or clinic visits.
+          Discover admin-verified physiotherapists, occupational therapists, pediatric nurses, and senior care specialists available for home visits.
         </p>
       </div>
 
@@ -104,7 +113,7 @@ export const ProvidersPage: React.FC = () => {
             <label className="form-label">Location / City</label>
             <input
               type="text"
-              placeholder="e.g. Metropolis"
+              placeholder="Enter City name..."
               value={city}
               onChange={(e) => setCity(e.target.value)}
               onBlur={fetchProviders}
@@ -114,14 +123,9 @@ export const ProvidersPage: React.FC = () => {
         </div>
 
         <div style={{ display: 'flex', gap: '1.5rem', alignItems: 'center', paddingTop: '0.75rem', borderTop: '1px solid var(--border)' }}>
-          <label style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', fontSize: '0.9rem', fontWeight: 600, cursor: 'pointer' }}>
-            <input type="checkbox" checked={homeVisit} onChange={(e) => setHomeVisit(e.target.checked)} />
-            <Home size={16} color="var(--primary)" /> Home Visit Available
-          </label>
-          <label style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', fontSize: '0.9rem', fontWeight: 600, cursor: 'pointer' }}>
-            <input type="checkbox" checked={clinicVisit} onChange={(e) => setClinicVisit(e.target.checked)} />
-            <Building2 size={16} color="var(--primary)" /> Clinic Appointment Available
-          </label>
+          <span style={{ fontSize: '0.85rem', fontWeight: 700, color: 'var(--primary)', backgroundColor: 'var(--primary-light)', padding: '0.3rem 0.75rem', borderRadius: '8px' }}>
+            🏠 Verified Home Visit Specialists
+          </span>
         </div>
       </div>
 
@@ -156,20 +160,15 @@ export const ProvidersPage: React.FC = () => {
                 </div>
 
                 <div style={{ display: 'flex', gap: '0.4rem', flexWrap: 'wrap', marginBottom: '1rem' }}>
-                  {p.homeVisitAvailable && (
-                    <span style={{ fontSize: '0.75rem', background: '#dcfce7', color: '#15803d', padding: '0.2rem 0.6rem', borderRadius: '6px', fontWeight: 600 }}>
-                      Home Visit
-                    </span>
-                  )}
-                  {p.clinicVisitAvailable && (
-                    <span style={{ fontSize: '0.75rem', background: '#e0f2fe', color: '#0369a1', padding: '0.2rem 0.6rem', borderRadius: '6px', fontWeight: 600 }}>
-                      Clinic Visit
-                    </span>
-                  )}
+                  <span style={{ fontSize: '0.75rem', background: '#dcfce7', color: '#15803d', padding: '0.2rem 0.6rem', borderRadius: '6px', fontWeight: 600 }}>
+                    🏠 Home Visit Specialist
+                  </span>
                 </div>
 
                 <div style={{ fontSize: '0.9rem', color: 'var(--text-main)', marginBottom: '1.25rem' }}>
-                  <strong>Fee:</strong> <span style={{ fontSize: '1.1rem', fontWeight: 800, color: 'var(--primary)' }}>₹{p.chargesPerSession}</span> / session
+                  <strong>Fee:</strong> <span style={{ fontSize: '1.1rem', fontWeight: 800, color: 'var(--primary)' }}>
+                    ₹{p.category?.slug === 'physiotherapy' ? 450 : p.category?.slug === 'occupational-therapy' ? 550 : (p.chargesPerSession || 450)}
+                  </span> / session
                 </div>
               </div>
 
@@ -186,7 +185,7 @@ export const ProvidersPage: React.FC = () => {
                   className="btn btn-primary btn-sm"
                   style={{ flex: 1, justifyContent: 'center' }}
                 >
-                  Book Appointment
+                  Book Home Visit
                 </button>
               </div>
             </div>

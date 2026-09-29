@@ -8,11 +8,12 @@ export const getPublicProviders = async (req: Request, res: Response, next: Next
   try {
     const { categoryId, homeVisit, clinicVisit, city } = req.query;
 
-    // First find verified provider user IDs
+    // First find verified provider user IDs (strictly excluding blocked providers)
     const verifiedUsers = await User.find({
       role: UserRole.PROVIDER,
       verificationStatus: VerificationStatus.VERIFIED,
       isActive: true,
+      isBlocked: { $ne: true },
     }).select('_id');
 
     const verifiedUserIds = verifiedUsers.map((u) => u._id);
@@ -27,7 +28,7 @@ export const getPublicProviders = async (req: Request, res: Response, next: Next
     if (city) filter.city = new RegExp(city as string, 'i');
 
     const providers = await ProviderProfile.find(filter)
-      .populate('userId', 'email phone verificationStatus')
+      .populate('userId', 'email phone verificationStatus isBlocked')
       .populate('category')
       .populate('servicesOffered');
 
@@ -42,19 +43,24 @@ export const getProviderById = async (req: Request, res: Response, next: NextFun
   try {
     const { id } = req.params;
     let provider = await ProviderProfile.findById(id)
-      .populate('userId', 'email phone verificationStatus')
+      .populate('userId', 'email phone verificationStatus isBlocked')
       .populate('category')
       .populate('servicesOffered');
 
     if (!provider) {
       provider = await ProviderProfile.findOne({ userId: id })
-        .populate('userId', 'email phone verificationStatus')
+        .populate('userId', 'email phone verificationStatus isBlocked')
         .populate('category')
         .populate('servicesOffered');
     }
 
     if (!provider) {
       return res.status(404).json({ success: false, message: 'Provider profile not found' });
+    }
+
+    const providerUser = provider.userId as any;
+    if (providerUser && providerUser.isBlocked) {
+      return res.status(404).json({ success: false, message: 'Provider is temporarily unavailable.' });
     }
 
     return res.json({ success: true, provider });

@@ -1,5 +1,6 @@
 import { Request, Response, NextFunction } from 'express';
 import Booking from '../models/Booking';
+import User from '../models/User';
 import ProviderProfile from '../models/ProviderProfile';
 import ClinicProfile from '../models/ClinicProfile';
 import LabProfile from '../models/LabProfile';
@@ -41,27 +42,64 @@ export const getAvailableTimeSlots = async (req: Request, res: Response, next: N
     }
 
     const bookingDateStr = date as string;
-    const dateObj = new Date(bookingDateStr);
+    const [y, m, d] = bookingDateStr.split('-').map(Number);
+    const dateObj = new Date(y, m - 1, d);
     const dayName = dateObj.toLocaleDateString('en-US', { weekday: 'long' });
 
     let workingHoursObj = { available: true, startTime: '09:00', endTime: '18:00' };
 
     // Fetch entity schedule
     if (providerId) {
-      const provider = await ProviderProfile.findOne({ userId: providerId });
-      if (provider && provider.workingHours) {
+      const provider = await ProviderProfile.findOne({
+        $or: [{ userId: providerId }, { _id: providerId }],
+      }).populate('userId', 'isBlocked isActive');
+
+      if (!provider) {
+        return res.status(404).json({ success: false, message: 'Provider not found', availableSlots: [] });
+      }
+
+      const provUser = provider.userId as any;
+      if (provUser && (provUser.isBlocked || !provUser.isActive)) {
+        return res.status(404).json({ success: false, message: 'Provider is currently unavailable', availableSlots: [] });
+      }
+
+      if (provider.workingHours && provider.workingHours.length > 0) {
         const daySchedule = provider.workingHours.find((w) => w.day.toLowerCase() === dayName.toLowerCase());
         if (daySchedule) workingHoursObj = daySchedule;
       }
     } else if (clinicId) {
-      const clinic = await ClinicProfile.findOne({ userId: clinicId });
-      if (clinic && clinic.openingHours) {
+      const clinic = await ClinicProfile.findOne({
+        $or: [{ userId: clinicId }, { _id: clinicId }],
+      }).populate('userId', 'isBlocked isActive');
+
+      if (!clinic) {
+        return res.status(404).json({ success: false, message: 'Clinic not found', availableSlots: [] });
+      }
+
+      const clinicUser = clinic.userId as any;
+      if (clinicUser && (clinicUser.isBlocked || !clinicUser.isActive)) {
+        return res.status(404).json({ success: false, message: 'Clinic is currently unavailable', availableSlots: [] });
+      }
+
+      if (clinic.openingHours && clinic.openingHours.length > 0) {
         const daySchedule = clinic.openingHours.find((w) => w.day.toLowerCase() === dayName.toLowerCase());
         if (daySchedule) workingHoursObj = daySchedule;
       }
     } else if (labId) {
-      const lab = await LabProfile.findOne({ userId: labId });
-      if (lab && lab.openingHours) {
+      const lab = await LabProfile.findOne({
+        $or: [{ userId: labId }, { _id: labId }],
+      }).populate('userId', 'isBlocked isActive');
+
+      if (!lab) {
+        return res.status(404).json({ success: false, message: 'Lab not found', availableSlots: [] });
+      }
+
+      const labUser = lab.userId as any;
+      if (labUser && (labUser.isBlocked || !labUser.isActive)) {
+        return res.status(404).json({ success: false, message: 'Lab is currently unavailable', availableSlots: [] });
+      }
+
+      if (lab.openingHours && lab.openingHours.length > 0) {
         const daySchedule = lab.openingHours.find((w) => w.day.toLowerCase() === dayName.toLowerCase());
         if (daySchedule) workingHoursObj = daySchedule;
       }

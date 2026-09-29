@@ -1,5 +1,5 @@
 import mongoose, { Schema, Document } from 'mongoose';
-import { UserRole, SettlementStatus } from '../constants/enums';
+import { UserRole, SettlementStatus, PaymentMethod, PlatformSettlementStatus } from '../constants/enums';
 
 export interface ISettlement extends Document {
   settlementId: string;
@@ -12,6 +12,14 @@ export interface ISettlement extends Document {
   platformFee: number;
   taxAmount: number;
   netEarning: number;
+
+  // Cash Payment & Platform Payable Extensions
+  paymentMethod?: PaymentMethod;
+  cashCollectedByProvider?: number;
+  platformPayableAmount?: number;
+  platformSettlementStatus?: PlatformSettlementStatus;
+  platformPaymentTxnId?: string;
+  paidToPlatformAt?: Date;
 
   status: SettlementStatus;
   settledAt?: Date;
@@ -35,6 +43,18 @@ const SettlementSchema: Schema = new Schema(
     taxAmount: { type: Number, required: true, default: 0 },
     netEarning: { type: Number, required: true },
 
+    paymentMethod: { type: String, enum: Object.values(PaymentMethod), default: PaymentMethod.RAZORPAY },
+    cashCollectedByProvider: { type: Number, default: 0 },
+    platformPayableAmount: { type: Number, default: 0 },
+    platformSettlementStatus: {
+      type: String,
+      enum: Object.values(PlatformSettlementStatus),
+      default: PlatformSettlementStatus.NOT_APPLICABLE,
+      index: true,
+    },
+    platformPaymentTxnId: { type: String },
+    paidToPlatformAt: { type: Date },
+
     status: { type: String, enum: Object.values(SettlementStatus), default: SettlementStatus.PENDING, index: true },
     settledAt: { type: Date },
     settlementReference: { type: String },
@@ -44,5 +64,6 @@ const SettlementSchema: Schema = new Schema(
 );
 
 SettlementSchema.index({ entityUserId: 1, status: 1 });
+SettlementSchema.index({ entityUserId: 1, platformSettlementStatus: 1 });
 
 export default mongoose.model<ISettlement>('Settlement', SettlementSchema);

@@ -7,6 +7,8 @@ interface StatusBadgeProps {
 export const StatusBadge: React.FC<StatusBadgeProps> = ({ status }) => {
   const getBadgeClass = (s: string) => {
     switch (s) {
+      case 'REQUESTED':
+      case 'SEARCHING':
       case 'PENDING':
       case 'PENDING_VERIFICATION':
       case 'PROCESSING':
@@ -19,8 +21,10 @@ export const StatusBadge: React.FC<StatusBadgeProps> = ({ status }) => {
       case 'CANCELLED':
       case 'FAILED':
       case 'REFUNDED':
+      case 'NO_PROVIDER_FOUND':
         return 'badge-rejected';
       case 'IN_PROGRESS':
+      case 'PAYMENT_PENDING':
       case 'PARTIALLY_REFUNDED':
         return 'badge-in_progress';
       case 'COMPLETED':

@@ -1,7 +1,9 @@
 import React, { useState } from 'react';
+import { Link } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import { Address } from '../types';
-import { User, MapPin, Plus, Save, CheckCircle } from 'lucide-react';
+import { INDIAN_STATES_AND_UTS } from '../utils/location';
+import { User, MapPin, Plus, Save, CheckCircle, KeyRound } from 'lucide-react';
 
 export const CustomerProfilePage: React.FC = () => {
   const { user } = useAuth();
@@ -9,16 +11,14 @@ export const CustomerProfilePage: React.FC = () => {
   const [phone, setPhone] = useState(user?.phone || '');
   const [emergencyContact, setEmergencyContact] = useState(user?.profile?.emergencyContact || '');
 
-  const [addresses, setAddresses] = useState<Address[]>(user?.profile?.addresses || [
-    { label: 'Home', addressLine1: '123 Health Ave, Suite 4B', city: 'Metropolis', state: 'State', pincode: '110001', isDefault: true }
-  ]);
+  const [addresses, setAddresses] = useState<Address[]>(user?.profile?.addresses || []);
 
   const [showAddressModal, setShowAddressModal] = useState(false);
   const [label, setLabel] = useState('Home');
   const [addressLine1, setAddressLine1] = useState('');
-  const [city, setCity] = useState('Metropolis');
-  const [state, setState] = useState('State');
-  const [pincode, setPincode] = useState('110001');
+  const [city, setCity] = useState('');
+  const [state, setState] = useState('');
+  const [pincode, setPincode] = useState('');
 
   const handleAddAddress = (e: React.FormEvent) => {
     e.preventDefault();
@@ -67,7 +67,7 @@ export const CustomerProfilePage: React.FC = () => {
 
           <div className="form-group">
             <label className="form-label">Emergency Contact Number</label>
-            <input type="tel" value={emergencyContact} onChange={(e) => setEmergencyContact(e.target.value)} className="form-input" placeholder="+1 555-0199" />
+            <input type="tel" value={emergencyContact} onChange={(e) => setEmergencyContact(e.target.value)} className="form-input" placeholder="+91 98765 43210" />
           </div>
         </div>
       </div>
@@ -76,7 +76,7 @@ export const CustomerProfilePage: React.FC = () => {
       <div className="card">
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1.5rem' }}>
           <h3 style={{ fontSize: '1.2rem', fontWeight: 700, display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
-            <MapPin size={20} color="var(--primary)" /> Saved Delivery Addresses
+            <MapPin size={20} color="var(--primary)" /> Saved Delivery Addresses (India Only)
           </h3>
           <button onClick={() => setShowAddressModal(true)} className="btn btn-outline btn-sm" style={{ display: 'flex', gap: '0.35rem' }}>
             <Plus size={16} /> Add Address
@@ -91,7 +91,7 @@ export const CustomerProfilePage: React.FC = () => {
                   {addr.label}
                 </span>
                 <p style={{ fontWeight: 600, marginTop: '0.35rem', fontSize: '0.925rem' }}>{addr.addressLine1}</p>
-                <p style={{ color: 'var(--text-muted)', fontSize: '0.85rem' }}>{addr.city}, {addr.state} - {addr.pincode}</p>
+                <p style={{ color: 'var(--text-muted)', fontSize: '0.85rem' }}>{addr.city}, {addr.state} - {addr.pincode} ({addr.country || 'India'})</p>
               </div>
               {addr.isDefault && <span style={{ fontSize: '0.8rem', color: '#16a34a', fontWeight: 700 }}>Default Address</span>}
             </div>
@@ -99,11 +99,28 @@ export const CustomerProfilePage: React.FC = () => {
         </div>
       </div>
 
+      {/* Security & Password Section */}
+      <div className="card" style={{ marginTop: '2rem' }}>
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+          <div>
+            <h3 style={{ fontSize: '1.2rem', fontWeight: 700, display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+              <KeyRound size={20} color="var(--primary)" /> Account Security & Password
+            </h3>
+            <p style={{ color: 'var(--text-muted)', fontSize: '0.875rem', marginTop: '0.25rem' }}>
+              Keep your account safe by updating your password periodically
+            </p>
+          </div>
+          <Link to="/auth/change-password" className="btn btn-outline btn-sm" style={{ fontWeight: 700 }}>
+            Change Password
+          </Link>
+        </div>
+      </div>
+
       {/* Add Address Modal */}
       {showAddressModal && (
         <div className="modal-overlay" onClick={() => setShowAddressModal(false)}>
           <div className="modal-content" onClick={(e) => e.stopPropagation()}>
-            <h3 style={{ fontSize: '1.25rem', fontWeight: 700, marginBottom: '1.5rem' }}>Add New Delivery Address</h3>
+            <h3 style={{ fontSize: '1.25rem', fontWeight: 700, marginBottom: '1.5rem' }}>Add New Delivery Address (India)</h3>
             
             <form onSubmit={handleAddAddress}>
               <div className="form-group">
@@ -120,18 +137,42 @@ export const CustomerProfilePage: React.FC = () => {
                 <input type="text" required value={addressLine1} onChange={(e) => setAddressLine1(e.target.value)} className="form-input" />
               </div>
 
-              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: '1rem' }}>
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr 1fr', gap: '1rem' }}>
                 <div className="form-group">
                   <label className="form-label">City</label>
-                  <input type="text" required value={city} onChange={(e) => setCity(e.target.value)} className="form-input" />
+                  <input type="text" required placeholder="Enter City" value={city} onChange={(e) => setCity(e.target.value)} className="form-input" />
                 </div>
                 <div className="form-group">
-                  <label className="form-label">State</label>
-                  <input type="text" required value={state} onChange={(e) => setState(e.target.value)} className="form-input" />
+                  <label className="form-label">State / UT</label>
+                  <select
+                    required
+                    value={state}
+                    onChange={(e) => setState(e.target.value)}
+                    className="form-input"
+                  >
+                    <option value="">Select State / UT</option>
+                    {INDIAN_STATES_AND_UTS.map((s) => (
+                      <option key={s} value={s}>
+                        {s}
+                      </option>
+                    ))}
+                  </select>
                 </div>
                 <div className="form-group">
-                  <label className="form-label">Pincode</label>
-                  <input type="text" required value={pincode} onChange={(e) => setPincode(e.target.value)} className="form-input" />
+                  <label className="form-label">PIN Code (6 digits)</label>
+                  <input
+                    type="text"
+                    required
+                    maxLength={6}
+                    placeholder="e.g. 452001"
+                    value={pincode}
+                    onChange={(e) => setPincode(e.target.value.replace(/\D/g, '').slice(0, 6))}
+                    className="form-input"
+                  />
+                </div>
+                <div className="form-group">
+                  <label className="form-label">Country</label>
+                  <input type="text" readOnly value="India 🇮🇳" className="form-input" style={{ backgroundColor: '#f1f5f9', fontWeight: 700 }} />
                 </div>
               </div>
 
